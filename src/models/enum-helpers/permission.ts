@@ -1,0 +1,61 @@
+import { PermissionFlagsBits } from 'discord.js';
+
+// import { Language } from './language.js'; // Remove Language import as well
+
+// Simplified permission data - just mapping names to flags
+export abstract class Permission {
+    // Using Discord.js PermissionFlagsBits directly is often simpler
+    // Keeping this structure if the template relies on it elsewhere, but simplified
+    public static Data = {
+        AddReactions: PermissionFlagsBits.AddReactions,
+        Administrator: PermissionFlagsBits.Administrator,
+        AttachFiles: PermissionFlagsBits.AttachFiles,
+        BanMembers: PermissionFlagsBits.BanMembers,
+        ChangeNickname: PermissionFlagsBits.ChangeNickname,
+        Connect: PermissionFlagsBits.Connect,
+        CreateEvents: PermissionFlagsBits.CreateEvents,
+        CreateGuildExpressions: PermissionFlagsBits.CreateGuildExpressions,
+        CreateInstantInvite: PermissionFlagsBits.CreateInstantInvite,
+        CreatePrivateThreads: PermissionFlagsBits.CreatePrivateThreads,
+        CreatePublicThreads: PermissionFlagsBits.CreatePublicThreads,
+        DeafenMembers: PermissionFlagsBits.DeafenMembers,
+        EmbedLinks: PermissionFlagsBits.EmbedLinks,
+        KickMembers: PermissionFlagsBits.KickMembers,
+        ManageChannels: PermissionFlagsBits.ManageChannels,
+        ManageEmojisAndStickers: PermissionFlagsBits.ManageEmojisAndStickers,
+        ManageEvents: PermissionFlagsBits.ManageEvents,
+        ManageGuild: PermissionFlagsBits.ManageGuild,
+        ManageGuildExpressions: PermissionFlagsBits.ManageGuildExpressions,
+        ManageMessages: PermissionFlagsBits.ManageMessages,
+        ManageNicknames: PermissionFlagsBits.ManageNicknames,
+        ManageRoles: PermissionFlagsBits.ManageRoles,
+        ManageThreads: PermissionFlagsBits.ManageThreads,
+        ManageWebhooks: PermissionFlagsBits.ManageWebhooks,
+        MentionEveryone: PermissionFlagsBits.MentionEveryone,
+        ModerateMembers: PermissionFlagsBits.ModerateMembers,
+        MoveMembers: PermissionFlagsBits.MoveMembers,
+        MuteMembers: PermissionFlagsBits.MuteMembers,
+        PrioritySpeaker: PermissionFlagsBits.PrioritySpeaker,
+        ReadMessageHistory: PermissionFlagsBits.ReadMessageHistory,
+        RequestToSpeak: PermissionFlagsBits.RequestToSpeak,
+        SendMessages: PermissionFlagsBits.SendMessages,
+        SendMessagesInThreads: PermissionFlagsBits.SendMessagesInThreads,
+        SendPolls: PermissionFlagsBits.SendPolls,
+        SendTTSMessages: PermissionFlagsBits.SendTTSMessages,
+        SendVoiceMessages: PermissionFlagsBits.SendVoiceMessages,
+        Speak: PermissionFlagsBits.Speak,
+        Stream: PermissionFlagsBits.Stream,
+        UseApplicationCommands: PermissionFlagsBits.UseApplicationCommands,
+        UseEmbeddedActivities: PermissionFlagsBits.UseEmbeddedActivities,
+        UseExternalApps: PermissionFlagsBits.UseExternalApps,
+        UseExternalEmojis: PermissionFlagsBits.UseExternalEmojis,
+        UseExternalSounds: PermissionFlagsBits.UseExternalSounds,
+        UseExternalStickers: PermissionFlagsBits.UseExternalStickers,
+        UseSoundboard: PermissionFlagsBits.UseSoundboard,
+        UseVAD: PermissionFlagsBits.UseVAD,
+        ViewAuditLog: PermissionFlagsBits.ViewAuditLog,
+        ViewChannel: PermissionFlagsBits.ViewChannel,
+        ViewCreatorMonetizationAnalytics: PermissionFlagsBits.ViewCreatorMonetizationAnalytics,
+        ViewGuildInsights: PermissionFlagsBits.ViewGuildInsights,
+    };
+}
