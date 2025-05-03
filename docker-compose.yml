@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+    db:
+        image: postgres:16
+        profiles: ['localdb']
+        environment:
+            POSTGRES_DB: discorss
+            POSTGRES_USER: discorss
+            POSTGRES_PASSWORD: discorss
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD', 'pg_isready', '-U', 'discorss']
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        ports:
+            - '5432:5432'
+
+    bot:
+        build: .
+        env_file: .env
+        environment:
+            # Use DATABASE_URL from .env if set, otherwise default to local db
+            DATABASE_URL: ${DATABASE_URL:-postgres://discorss:discorss@db:5432/discorss}
+            DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+            DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+            DEVELOPER_IDS: ${DEVELOPER_IDS}
+            OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+        depends_on:
+            db:
+                condition: service_healthy
+        # Uncomment if you want to expose a port for a web UI/API
+        # ports:
+        #   - "3000:3000"
+
+volumes:
+    pgdata:

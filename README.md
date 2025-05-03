@@ -12,12 +12,29 @@ Features:
 
 ## Deployment
 
-Fill the rest of the .env file.
-After installing the dependencies, you also need to register the slash commands by running `pnpm commands:register`.
+Fill out the `.env` file with your configuration.
+After installing dependencies, register the slash commands by running `pnpm commands:register`.
 
-Setup a bot in the discord developer portal and put the token in for the `DISCORD_TOKEN` and the client id in for the `DISCORD_CLIENT_ID` variable.
+Set up a bot in the Discord developer portal and put the token in for the `DISCORD_BOT_TOKEN` and the client id in for the `DISCORD_CLIENT_ID` variable.
 
-Get a postgres compatible db url and put in for the `DATABASE_URL`.
-You can use an external provider like [Neon](https://neon.tech/), or add a PostgreSQL service directly within your Railway project dashboard. Railway will automatically provide the `DATABASE_URL` environment variable.
+Get a Postgres-compatible database URL and set it as `DATABASE_URL` in your `.env`. You can use an external provider like [Neon](https://neon.tech/) or add a PostgreSQL service directly within your Railway project dashboard. Railway will automatically provide the `DATABASE_URL` environment variable.
 
-For deployment, I'm deploying on [Railway](https://railway.com/). Deployment is very cheap.
+### Docker Compose (with optional local Postgres)
+
+This project uses Docker Compose profiles to make the local Postgres database optional.
+
+- **To use a local Postgres database:**
+
+    ```sh
+    docker-compose up --profile localdb
+    ```
+
+    This starts both the bot and a local Postgres service. The bot will connect to the local database by default.
+
+- **To use an external database (e.g., Neon, Railway):**
+    ```sh
+    docker-compose up
+    ```
+    This starts only the bot service. Make sure your `.env` contains a valid external `DATABASE_URL`.
+
+For deployment, you can use [Railway](https://railway.com/) or any other platform that supports Docker or Node.js.
