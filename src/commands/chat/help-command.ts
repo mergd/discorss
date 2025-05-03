@@ -4,6 +4,7 @@ import { HelpOption } from '../../enums/index.js';
 import { EventData } from '../../models/internal-models.js';
 import { ClientUtils, FormatUtils, InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
+import { ChatCommandMetadata } from '../metadata.js';
 
 export class HelpCommand implements Command {
     public names = ['help'];
@@ -12,7 +13,7 @@ export class HelpCommand implements Command {
 
     public async execute(intr: ChatInputCommandInteraction, data: EventData): Promise<void> {
         let args = {
-            option: intr.options.getString('option') as HelpOption,
+            option: (intr.options.getString('option') as HelpOption) ?? HelpOption.COMMANDS,
         };
 
         let embed: EmbedBuilder;
@@ -25,28 +26,27 @@ export class HelpCommand implements Command {
                 break;
             }
             case HelpOption.COMMANDS: {
-                const testCmd = FormatUtils.commandMention(
-                    await ClientUtils.findAppCommand(intr.client, 'test')
-                );
-                const infoCmd = FormatUtils.commandMention(
-                    await ClientUtils.findAppCommand(intr.client, 'info')
-                );
-                const feedCmd = FormatUtils.commandMention(
-                    await ClientUtils.findAppCommand(intr.client, 'feed')
-                );
-                const categoryCmd = FormatUtils.commandMention(
-                    await ClientUtils.findAppCommand(intr.client, 'category')
-                );
+                const commandList = Object.entries(ChatCommandMetadata)
+                    .map(([key, metadata]) => {
+                        return ClientUtils.findAppCommand(intr.client, metadata.name).then(
+                            appCmd => {
+                                if (!appCmd)
+                                    return `• **/${metadata.name}**: ${metadata.description}`;
+                                const mention = FormatUtils.commandMention(appCmd);
+                                return `• ${mention}: ${metadata.description}`;
+                            }
+                        );
+                    })
+                    .filter(item => item !== null);
+
+                const commandDescriptions = await Promise.all(commandList);
 
                 embed = new EmbedBuilder()
                     .setTitle('Command List')
                     .setDescription(
-                        `Here are the main commands:\n\n` +
-                            `• ${testCmd}: A generic test command.\n` +
-                            `• ${infoCmd}: Shows information about the bot.\n` +
-                            `• ${feedCmd}: Manage RSS feed subscriptions (use subcommands \`add\`, \`remove\`, \`list\`, \`test\`).\n` +
-                            `• ${categoryCmd}: Manage feed categories (use subcommands \`setfrequency\`, \`list\`).\n\n` +
-                            `Use </help option:Contact Support> for support details.`
+                        `Here are the available commands:\n\n${commandDescriptions.join(
+                            '\n'
+                        )}\n\nUse </help option:Contact Support> for support details.`
                     )
                     .setColor('Green');
                 break;

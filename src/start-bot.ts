@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { env } from './utils/env.js';
 
 import { Button } from './buttons/index.js';
-import { DevCommand, HelpCommand, InfoCommand, CategoryCommand, FeedCommand } from './commands/chat/index.js';
+import {
+    DevCommand,
+    HelpCommand,
+    InfoCommand,
+    CategoryCommand,
+    FeedCommand,
+} from './commands/chat/index.js';
 import {
     ChatCommandMetadata,
     Command,
@@ -67,30 +73,16 @@ async function start(): Promise<void> {
         new InfoCommand(),
         new FeedCommand(),
         new CategoryCommand(),
-
-        // Message Context Commands
-        new ViewDateSent(),
-
-        // User Context Commands
-        new ViewDateJoined(),
-
-        // TODO: Add new commands here
     ];
 
     // Buttons
-    let buttons: Button[] = [
-        // TODO: Add new buttons here
-    ];
+    let buttons: Button[] = [];
 
     // Reactions
-    let reactions: Reaction[] = [
-        // TODO: Add new reactions here
-    ];
+    let reactions: Reaction[] = [];
 
     // Triggers
-    let triggers: Trigger[] = [
-        // TODO: Add new triggers here
-    ];
+    let triggers: Trigger[] = [];
 
     // Event handlers
     let guildJoinHandler = new GuildJoinHandler(eventDataService);
@@ -102,9 +94,7 @@ async function start(): Promise<void> {
     let reactionHandler = new ReactionHandler(reactions, eventDataService);
 
     // Jobs
-    let jobs: Job[] = [
-        // TODO: Add new jobs here (jobs specific to a single shard, if any)
-    ];
+    let jobs: Job[] = [];
 
     // Bot
     let bot = new Bot(
