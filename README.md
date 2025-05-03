@@ -20,4 +20,4 @@ Setup a bot in the discord developer portal and put the token in for the `DISCOR
 Get a postgres compatible db url and put in for the `DATABASE_URL`.
 You can use an external provider like [Neon](https://neon.tech/), or add a PostgreSQL service directly within your Railway project dashboard. Railway will automatically provide the `DATABASE_URL` environment variable.
 
-For deployment, I'm deploying on [Railway](https://railway.app/). Deployment is very cheap.
+For deployment, I'm deploying on [Railway](https://railway.com/). Deployment is very cheap.
