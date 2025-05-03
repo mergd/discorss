@@ -36,19 +36,19 @@ FROM base
 
 WORKDIR /usr/src/app
 
-# Copy only necessary production artifacts from previous stages
-# We copy the full node_modules from the deps stage for simplicity.
-# For a smaller image, you could run `pnpm install --prod` here
-# or use `pnpm prune --prod` in the build stage and copy those modules.
+# Copy essential files for running the application
+COPY package.json pnpm-lock.yaml ./
 COPY --from=deps /usr/src/app/node_modules ./node_modules
 COPY --from=build /usr/src/app/dist ./dist
-# Copy runtime assets needed by the bot
 COPY config ./config
 COPY lang ./lang
-
-# Define the default command to run the application using Node
-# Use the manager script for sharding support
-CMD ["node", "dist/start-manager.js"]
+# Copy drizzle config needed for migrations
+COPY src/drizzle.config.ts ./src/drizzle.config.ts
+COPY drizzle/migrations ./drizzle/migrations
+# Define the command to run migrations, register commands, and then start the app
+# Use npx to run drizzle-kit from node_modules/.bin
+# Use sh -c to chain commands
+CMD ["sh", "-c", "npx drizzle-kit migrate --config=src/drizzle.config.ts && node --enable-source-maps dist/start-bot.js commands register && node dist/start-manager.js"]
 
 # Optional: Expose the API port if used (check config/config.json)
 # Default from template might be 3000 or similar
