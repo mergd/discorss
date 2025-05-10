@@ -43,6 +43,8 @@ interface ParsedFeedItem {
     contentSnippet?: string;
     'content:encoded'?: string;
     comments?: string;
+    articleSummary?: string;
+    commentsSummary?: string;
 }
 
 const feedCheckIntervals: { [feedId: string]: NodeJS.Timeout } = {};
@@ -429,20 +431,31 @@ export class FeedPollJob extends Job {
                                 `[FeedPollJob] Attempting summarization for: ${sourceUrl}` +
                                     (item.comments ? ` (incl. comments: ${item.comments})` : '')
                             );
-                            summary = await summarizeContent(
+                            const summaries = await summarizeContent(
                                 articleContent,
                                 commentsContent,
                                 sourceUrl
                             );
-                            if (summary && !summary.startsWith('Could not generate summary:')) {
+                            // Store both summaries in the item
+                            item.articleSummary = summaries.articleSummary;
+                            item.commentsSummary = summaries.commentsSummary;
+                            if (
+                                (summaries.articleSummary &&
+                                    !summaries.articleSummary.startsWith(
+                                        'Could not generate summary:'
+                                    )) ||
+                                (summaries.commentsSummary &&
+                                    !summaries.commentsSummary.startsWith(
+                                        'Could not generate summary:'
+                                    ))
+                            ) {
                                 Logger.info(
-                                    `[FeedPollJob] Successfully generated summary for: ${sourceUrl}`
+                                    `[FeedPollJob] Successfully generated summaries for: ${sourceUrl}`
                                 );
                             } else {
                                 Logger.warn(
-                                    `[FeedPollJob] Summarization failed or insufficient content for: ${sourceUrl}. Reason: ${summary}`
+                                    `[FeedPollJob] Summarization failed or insufficient content for: ${sourceUrl}. Article: ${summaries.articleSummary} Comments: ${summaries.commentsSummary}`
                                 );
-                                // Do not overwrite summary with null, keep the failure message
                             }
                         } else {
                             Logger.warn(
@@ -578,19 +591,28 @@ export class FeedPollJob extends Job {
                             // Base content
                             let contentToSend = `📰 | **${title}**${dateTimestamp}${authorText}\n${linkLine}`;
 
-                            // Append summary if available and not an error message
+                            // Append summaries if available and not error messages
                             if (
-                                item.summary &&
-                                !item.summary.startsWith('Could not generate summary:')
+                                item.articleSummary &&
+                                !item.articleSummary.startsWith('Could not generate summary:')
                             ) {
-                                // Add a separator and the summary
-                                contentToSend += `\n\n**Summary:**\n${truncate(item.summary, 1500, true)}`; // Truncate summary if needed
-                            } else if (
-                                item.summary &&
-                                item.summary.startsWith('Could not generate summary:')
+                                contentToSend += `\n\n**Article Summary:**\n${truncate(item.articleSummary, 1500, true)}`;
+                            }
+                            if (
+                                item.commentsSummary &&
+                                !item.commentsSummary.startsWith('Could not generate summary:')
                             ) {
-                                // Optionally include the failure reason if desired
-                                contentToSend += `\n\n*(${item.summary})*`; // Example: show failure reason
+                                contentToSend += `\n\n**Comments Summary:**\n${truncate(item.commentsSummary, 1500, true)}`;
+                            }
+                            if (
+                                (item.articleSummary &&
+                                    item.articleSummary.startsWith(
+                                        'Could not generate summary:'
+                                    )) ||
+                                (item.commentsSummary &&
+                                    item.commentsSummary.startsWith('Could not generate summary:'))
+                            ) {
+                                contentToSend += `\n\n*(${item.articleSummary || ''} ${item.commentsSummary || ''})*`;
                             }
 
                             try {

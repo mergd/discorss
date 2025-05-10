@@ -1,9 +1,10 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateText } from 'ai';
 import fetch from 'node-fetch';
-import { env } from './env.js';
+import { MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js'; // Added Logger
 import { posthog } from './analytics.js'; // Import posthog
+import { env } from './env.js';
 
 // Initialize OpenRouter Client
 const openrouter = createOpenRouter({
@@ -103,101 +104,103 @@ export async function summarizeContent(
     articleContent: string | null,
     commentsContent: string | null,
     sourceUrl?: string // Keep sourceUrl optional for flexibility
+): Promise<{ articleSummary: string | null; commentsSummary: string | null }> {
+    let articleSummary: string | null = null;
+    let commentsSummary: string | null = null;
+
+    if (articleContent) {
+        articleSummary = await summarizeSingleContent(articleContent, 'ARTICLE CONTENT', sourceUrl);
+    }
+    if (commentsContent) {
+        commentsSummary = await summarizeSingleContent(
+            commentsContent,
+            'COMMENTS CONTENT',
+            sourceUrl
+        );
+    }
+    return { articleSummary, commentsSummary };
+}
+
+async function summarizeSingleContent(
+    content: string,
+    contentType: 'ARTICLE CONTENT' | 'COMMENTS CONTENT',
+    sourceUrl?: string
 ): Promise<string | null> {
-    if (!articleContent && !commentsContent) {
-        Logger.warn('[Summarizer] No content provided for summarization.');
-        return 'Could not generate summary: No content available.'; // Indicate failure clearly
+    if (!content) {
+        Logger.warn(`[Summarizer] No ${contentType} provided for summarization.`);
+        return 'Could not generate summary: No content available.';
     }
 
-    const modelName = 'google/gemini-2.5-flash-preview'; // Ensure correct model is used
-    const model = openrouter(modelName);
-
-    const combinedContent = [
-        articleContent ? `ARTICLE CONTENT:\\n${articleContent}` : '',
-        commentsContent ? `\\n\\nCOMMENTS CONTENT:\\n${commentsContent}` : '',
-    ]
-        .filter(Boolean)
-        .join('');
-
-    // Limit total input length
-    const maxInputLength = 15000; // Example limit
+    const model = openrouter(MODEL_NAME);
+    const maxInputLength = 15000;
     const truncatedContent =
-        combinedContent.length > maxInputLength
-            ? combinedContent.substring(0, maxInputLength) + '\\n[Content Truncated]'
-            : combinedContent;
-
+        content.length > maxInputLength
+            ? content.substring(0, maxInputLength) + '\n[Content Truncated]'
+            : content;
     const prompt = `
 You are an expert summarizer for Discord bot messages. Your task is to create a concise, neutral, and informative summary of the provided text.
 
 **Instructions:**
-1.  Analyze the provided ARTICLE CONTENT and/or COMMENTS CONTENT.
+1.  Analyze the provided ${contentType}.
 2.  Generate a brief summary (ideally 2-4 sentences, max 1500 characters) capturing the main points or themes.
 3.  Focus on factual information presented. Avoid speculation or adding external knowledge.
-4.  If both article and comments are provided, synthesize the key takeaways from both.
-5.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
-6.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
-7.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 6.
+4.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
+5.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
+6.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 5.
 
 **Content to Summarize:**
 ${truncatedContent}
 
 **Summary:**
     `;
-
     try {
         Logger.info(
-            `[Summarizer] Sending content from ${sourceUrl || 'source'} to ${modelName}...`
+            `[Summarizer] Sending ${contentType} from ${sourceUrl || 'source'} to ${MODEL_NAME}...`
         );
         const startTime = Date.now();
-
         const { text } = await generateText({
             model: model,
             prompt: prompt,
             maxTokens: 300,
             temperature: 0.3,
         });
-
         const duration = Date.now() - startTime;
         Logger.info(
-            `[Summarizer] Received summary from ${modelName} (${duration}ms). Length: ${text?.length ?? 0}`
+            `[Summarizer] Received summary from ${MODEL_NAME} (${duration}ms). Length: ${text?.length ?? 0}`
         );
-
         if (!text || text.trim().length === 0) {
-            Logger.warn(`[Summarizer] Received empty summary from ${modelName}.`);
-            // Capture this specific case in PostHog
+            Logger.warn(`[Summarizer] Received empty summary from ${MODEL_NAME}.`);
             posthog?.capture({
                 distinctId: 'system_summarizer',
                 event: 'summarization_empty_response',
-                properties: { model: modelName, sourceUrl },
+                properties: { model: MODEL_NAME, sourceUrl, contentType },
             });
             return 'Could not generate summary: Empty response from model.';
         }
         if (text.includes('Could not generate summary:')) {
             Logger.warn(`[Summarizer] Model indicated insufficient content for ${sourceUrl}.`);
-            // Capture this specific case in PostHog
             posthog?.capture({
                 distinctId: 'system_summarizer',
                 event: 'summarization_insufficient_content',
-                properties: { model: modelName, sourceUrl },
+                properties: { model: MODEL_NAME, sourceUrl, contentType },
             });
-            return text; // Return the specific failure message from the model
+            return text;
         }
-
         posthog?.capture({
             distinctId: 'system_summarizer',
             event: 'summarization_success',
             properties: {
-                model: modelName,
+                model: MODEL_NAME,
                 sourceUrl: sourceUrl,
                 contentLength: truncatedContent.length,
                 summaryLength: text.length,
                 durationMs: duration,
+                contentType,
             },
         });
-
         return text.trim();
     } catch (error: any) {
-        Logger.error(`[Summarizer] Error calling OpenRouter model ${modelName}:`, error);
+        Logger.error(`[Summarizer] Error calling OpenRouter model ${MODEL_NAME}:`, error);
         posthog?.capture({
             distinctId: 'system_summarizer',
             event: '$exception',
@@ -205,8 +208,9 @@ ${truncatedContent}
                 $exception_type: 'SummarizationModelError',
                 $exception_message: error instanceof Error ? error.message : String(error),
                 $exception_stack_trace: error instanceof Error ? error.stack : undefined,
-                model: modelName,
+                model: MODEL_NAME,
                 sourceUrl: sourceUrl,
+                contentType,
             },
         });
         return 'Could not generate summary: Error contacting summarization service.';

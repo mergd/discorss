@@ -7,7 +7,6 @@ import {
     text,
     timestamp,
     uniqueIndex,
-    index,
     uuid,
 } from 'drizzle-orm/pg-core';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,7 +35,8 @@ export const feeds = pgTable('feeds', {
     //     .$defaultFn(() => new Date()), // Set creation timestamp automatically
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
     summarize: boolean('summarize').notNull().default(false), // AI summarization enabled
-    lastSummary: text('last_summary'), // Last AI summary (nullable)
+    lastArticleSummary: text('last_article_summary'), // Last article summary (nullable)
+    lastCommentsSummary: text('last_comments_summary'), // Last comments summary (nullable)
     // Add the new column for recent links (store as JSON string)
     recentLinks: text('recent_links'),
     lastFailureNotificationAt: timestamp('last_failure_notification_at', { mode: 'date' }),

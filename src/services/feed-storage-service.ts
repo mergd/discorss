@@ -19,7 +19,8 @@ export interface FeedConfig {
     createdAt: Date;
     lastChecked?: Date | null;
     summarize: boolean;
-    lastSummary?: string | null;
+    lastArticleSummary?: string | null;
+    lastCommentsSummary?: string | null;
     recentLinks?: string[] | null;
     lastFailureNotificationAt?: Date | null;
     backoffUntil?: Date | null;
@@ -47,7 +48,8 @@ export class FeedStorageService {
             | 'consecutiveFailures'
             | 'createdAt'
             | 'lastChecked'
-            | 'lastSummary'
+            | 'lastArticleSummary'
+            | 'lastCommentsSummary'
             | 'recentLinks'
             | 'lastFailureNotificationAt'
             | 'backoffUntil'
@@ -211,7 +213,7 @@ export class FeedStorageService {
     }
 
     /**
-     * Updates feed details (nickname, category, frequency, summarize, lastSummary) using Drizzle.
+     * Updates feed details (nickname, category, frequency, summarize, lastArticleSummary, lastCommentsSummary) using Drizzle.
      * @returns True if the feed was found and updated, false otherwise.
      */
     public static async updateFeedDetails(
@@ -223,7 +225,8 @@ export class FeedStorageService {
             category?: string | null;
             frequencyOverrideMinutes?: number | null;
             summarize?: boolean | null; // Use boolean directly
-            lastSummary?: string | null;
+            lastArticleSummary?: string | null;
+            lastCommentsSummary?: string | null;
             // Note: recentLinks is handled separately by updateRecentLinks
         }
     ): Promise<boolean> {
@@ -234,7 +237,10 @@ export class FeedStorageService {
         if ('frequencyOverrideMinutes' in updates)
             valuesToUpdate.frequencyOverrideMinutes = updates.frequencyOverrideMinutes;
         if ('summarize' in updates) valuesToUpdate.summarize = updates.summarize;
-        if ('lastSummary' in updates) valuesToUpdate.lastSummary = updates.lastSummary;
+        if ('lastArticleSummary' in updates)
+            valuesToUpdate.lastArticleSummary = updates.lastArticleSummary;
+        if ('lastCommentsSummary' in updates)
+            valuesToUpdate.lastCommentsSummary = updates.lastCommentsSummary;
 
         if (Object.keys(valuesToUpdate).length === 0) {
             console.log(`[FeedStorageService] No details provided to update for feed ${feedId}`);

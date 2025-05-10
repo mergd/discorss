@@ -251,23 +251,26 @@ export class FeedCommand implements Command {
                                             Logger.info(
                                                 `[FeedAdd] Summarizing initial item for ${url}`
                                             );
-                                            initialSummary = await summarizeContent(
-                                                articleContent,
-                                                commentsContent,
-                                                firstItem.link || url
-                                            );
+                                            const { articleSummary, commentsSummary } =
+                                                await summarizeContent(
+                                                    articleContent,
+                                                    commentsContent,
+                                                    firstItem.link || url
+                                                );
                                             if (
-                                                initialSummary?.startsWith(
+                                                articleSummary?.startsWith(
                                                     'Could not generate summary:'
                                                 )
                                             ) {
                                                 // Inform user about summary failure but proceed with add
                                                 await InteractionUtils.send(
                                                     intr,
-                                                    `⚠️ ${initialSummary}. Feed will be added without an initial summary check.`,
+                                                    `⚠️ ${articleSummary}. Feed will be added without an initial summary check.`,
                                                     true
                                                 ); // Send ephemeral follow-up
                                                 initialSummary = null; // Don't store the failure message
+                                            } else {
+                                                initialSummary = articleSummary;
                                             }
                                         } else {
                                             Logger.warn(
@@ -337,7 +340,7 @@ export class FeedCommand implements Command {
                                     newFeedId,
                                     targetChannel.id,
                                     intr.guild.id,
-                                    { lastSummary: initialSummary }
+                                    { lastArticleSummary: initialSummary }
                                 );
                             }
 
@@ -724,7 +727,8 @@ export class FeedCommand implements Command {
                                 category?: string | null;
                                 frequencyOverrideMinutes?: number | null;
                                 summarize?: boolean | null;
-                                lastSummary?: string | null;
+                                lastArticleSummary?: string | null;
+                                lastCommentsSummary?: string | null;
                             } = {};
                             const originalValues: Partial<FeedConfig> = {
                                 // Store original values for comparison
@@ -796,7 +800,11 @@ export class FeedCommand implements Command {
                                 // --- PostHog Tracking --- END
 
                                 let changesSummary = Object.entries(updates)
-                                    .filter(([key, _value]) => key !== 'lastSummary') // Don't show lastSummary in user reply
+                                    .filter(
+                                        ([key, _value]) =>
+                                            key !== 'lastArticleSummary' &&
+                                            key !== 'lastCommentsSummary'
+                                    ) // Don't show lastSummary in user reply
                                     .map(([key, value]) => {
                                         let displayValue =
                                             value === null || value === ''
@@ -832,10 +840,14 @@ export class FeedCommand implements Command {
                                         if (pageContent) contentToSummarize = pageContent;
                                     }
                                     if (contentToSummarize) {
-                                        updates.lastSummary = await summarizeContent(
-                                            contentToSummarize,
-                                            targetFeed.url
-                                        );
+                                        const { articleSummary, commentsSummary } =
+                                            await summarizeContent(
+                                                contentToSummarize,
+                                                null,
+                                                feed.items[0].link
+                                            );
+                                        updates.lastArticleSummary = articleSummary;
+                                        updates.lastCommentsSummary = commentsSummary;
                                     }
                                 } catch (err) {
                                     console.error('Error fetching/summarizing for feed:', err);
@@ -898,12 +910,16 @@ export class FeedCommand implements Command {
 
                                     // Generate summary if any content was fetched
                                     if (articleContent || commentsContent) {
-                                        summary = await summarizeContent(
-                                            articleContent,
-                                            commentsContent,
-                                            firstItem.link || url
-                                        );
-                                        // Don't need to log/warn here, just display the result
+                                        const { articleSummary, commentsSummary } =
+                                            await summarizeContent(
+                                                articleContent,
+                                                commentsContent,
+                                                firstItem.link || url
+                                            );
+                                        summary =
+                                            articleSummary ||
+                                            commentsSummary ||
+                                            'No summary generated.';
                                     } else {
                                         summary = 'Could not generate summary: No content fetched.';
                                     }
@@ -1102,19 +1118,22 @@ ${linkLine}${snippet}`;
                                         }
 
                                         if (contentToSummarize) {
-                                            const summary = await summarizeContent(
-                                                contentToSummarize,
-                                                latestItem.link || targetFeed.url
-                                            );
-                                            if (summary) {
+                                            const { articleSummary, commentsSummary } =
+                                                await summarizeContent(
+                                                    contentToSummarize,
+                                                    null,
+                                                    latestItem.link
+                                                );
+                                            if (articleSummary) {
                                                 embed.addFields({
                                                     name: 'AI Summary (Latest Item)',
-                                                    value: summary,
+                                                    value: articleSummary,
                                                 });
-                                            } else {
+                                            }
+                                            if (commentsSummary) {
                                                 embed.addFields({
                                                     name: 'AI Summary (Latest Item)',
-                                                    value: 'Failed to generate summary.',
+                                                    value: commentsSummary,
                                                 });
                                             }
                                         } else {
@@ -1214,11 +1233,13 @@ ${linkLine}${snippet}`;
                                         // YouTube feeds don't have typical article content, summarize based on link/metadata?
                                         // Let's just pass the link and title to the summarizer for YT.
                                         const contentToSummarize = `Title: ${firstItem.title}\nLink: ${firstItem.link}\nDescription: ${firstItem.contentSnippet || ''}`;
-                                        initialSummary = await summarizeContent(
-                                            contentToSummarize,
-                                            null,
-                                            firstItem.link
-                                        );
+                                        const { articleSummary, commentsSummary } =
+                                            await summarizeContent(
+                                                contentToSummarize,
+                                                null,
+                                                firstItem.link
+                                            );
+                                        initialSummary = articleSummary;
                                         if (
                                             initialSummary?.startsWith(
                                                 'Could not generate summary:'
@@ -1282,7 +1303,7 @@ ${linkLine}${snippet}`;
                                     newFeedId,
                                     targetChannel.id,
                                     intr.guild.id,
-                                    { lastSummary: initialSummary }
+                                    { lastArticleSummary: initialSummary }
                                 );
                             }
 

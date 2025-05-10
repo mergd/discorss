@@ -8,3 +8,4 @@ export const FAILURE_NOTIFICATION_THRESHOLD = 5;
 export const MAX_ITEM_AGE_DAYS = 1;
 export const BASE_MINUTES = 5;
 export const MAX_MINUTES = 360; // 6 hours
+export const MODEL_NAME = 'google/gemini-2.5-flash-preview';
