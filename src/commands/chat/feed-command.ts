@@ -10,7 +10,7 @@ import {
     User,
 } from 'discord.js';
 import Parser from 'rss-parser';
-
+import { ITEMS_PER_PAGE, PAGINATION_TIMEOUT } from '../../constants/index.js';
 import { getArchiveUrl, isPaywalled } from '../../constants/paywalled-sites.js';
 import { EventData } from '../../models/internal-models.js';
 import { FeedConfig, FeedStorageService } from '../../services/feed-storage-service.js';
@@ -31,9 +31,6 @@ const parser = new Parser({
 function getShortId(uuid: string): string {
     return uuid.substring(0, 8);
 }
-
-const ITEMS_PER_PAGE = 7;
-const PAGINATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 // Helper function to generate the embed for a specific page
 async function generateFeedListPage(

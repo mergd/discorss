@@ -3,7 +3,7 @@ import { and, asc, count, eq, gte } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { categories, feedFailures, feeds } from '../db/schema.js';
-
+import { MAX_RECENT_LINKS } from '../constants/index.js';
 // Interface for Feed Configuration
 export interface FeedConfig {
     id: string;
@@ -29,8 +29,6 @@ export interface CategoryConfig {
     name: string;
     frequencyMinutes: number;
 }
-
-const MAX_RECENT_LINKS = 5;
 
 export class FeedStorageService {
     // --- Feed Operations ---

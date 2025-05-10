@@ -10,6 +10,13 @@ import {
     MessageFlags,
 } from 'discord.js';
 import Parser from 'rss-parser';
+import {
+    DEFAULT_FREQUENCY_MINUTES,
+    MIN_FREQUENCY_MINUTES,
+    MAX_FREQUENCY_MINUTES,
+    FAILURE_NOTIFICATION_THRESHOLD,
+    MAX_ITEM_AGE_DAYS,
+} from '../constants/index.js';
 
 import {
     CategoryConfig,
@@ -38,11 +45,6 @@ interface ParsedFeedItem {
 
 const feedCheckIntervals: { [feedId: string]: NodeJS.Timeout } = {};
 const categoryFrequencies: Map<string, number> = new Map();
-const DEFAULT_FREQUENCY_MINUTES = 15;
-const MIN_FREQUENCY_MINUTES = 1;
-const MAX_FREQUENCY_MINUTES = 1440;
-const FAILURE_NOTIFICATION_THRESHOLD = 5;
-const MAX_ITEM_AGE_DAYS = 2;
 
 // Store enum values for context passing
 const GuildTextChannelTypeValue = ChannelType.GuildText; // 0
