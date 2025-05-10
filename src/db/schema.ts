@@ -39,6 +39,8 @@ export const feeds = pgTable('feeds', {
     lastSummary: text('last_summary'), // Last AI summary (nullable)
     // Add the new column for recent links (store as JSON string)
     recentLinks: text('recent_links'),
+    lastFailureNotificationAt: timestamp('last_failure_notification_at', { mode: 'date' }),
+    backoffUntil: timestamp('backoff_until', { mode: 'date' }),
 });
 
 // Table for storing individual feed failure events (for rolling 24hr checks)

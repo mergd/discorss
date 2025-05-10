@@ -3,21 +3,24 @@ import {
     ChannelType,
     DiscordAPIError,
     EmbedBuilder,
+    MessageFlags,
     NewsChannel,
     ShardingManager,
     TextChannel,
     codeBlock,
-    MessageFlags,
 } from 'discord.js';
 import Parser from 'rss-parser';
 import {
+    BASE_MINUTES,
     DEFAULT_FREQUENCY_MINUTES,
-    MIN_FREQUENCY_MINUTES,
-    MAX_FREQUENCY_MINUTES,
     FAILURE_NOTIFICATION_THRESHOLD,
+    MAX_FREQUENCY_MINUTES,
     MAX_ITEM_AGE_DAYS,
+    MAX_MINUTES,
+    MIN_FREQUENCY_MINUTES,
 } from '../constants/index.js';
 
+import { PAYWALLED_DOMAINS } from '../constants/paywalled-sites.js';
 import {
     CategoryConfig,
     FeedConfig,
@@ -27,7 +30,6 @@ import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
 import { Job } from './job.js';
-import { PAYWALLED_DOMAINS, getArchiveUrl, isPaywalled } from '../constants/paywalled-sites.js';
 
 interface ParsedFeedItem {
     title?: string;
@@ -193,14 +195,26 @@ export class FeedPollJob extends Job {
             return;
         }
 
+        // --- Backoff check ---
+        if (feedConfig.backoffUntil && new Date(feedConfig.backoffUntil) > new Date()) {
+            Logger.info(
+                `[FeedPollJob] Skipping feed ${feedConfig.id} due to backoff. Next poll after: ${feedConfig.backoffUntil}`
+            );
+            return;
+        }
+
         try {
             const fetchedFeed = await this.parser.parseURL(feedConfig.url);
 
             // Update last checked time regardless of items found, as long as fetch succeeded
             await FeedStorageService.updateLastChecked(feedConfig.id);
 
+            // On success, clear backoff
+            await FeedStorageService.clearBackoffUntil(feedConfig.id);
+
             if (!fetchedFeed.items || fetchedFeed.items.length === 0) {
                 await FeedStorageService.clearFeedFailures(feedConfig.id);
+                await FeedStorageService.clearBackoffUntil(feedConfig.id);
                 return; // No items in feed
             }
 
@@ -269,6 +283,7 @@ export class FeedPollJob extends Job {
             // If no new items were found after all checks.
             if (newItems.length === 0) {
                 await FeedStorageService.clearFeedFailures(feedConfig.id);
+                await FeedStorageService.clearBackoffUntil(feedConfig.id);
                 return;
             }
 
@@ -290,6 +305,14 @@ export class FeedPollJob extends Job {
                 // Record the failure event
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
 
+                // --- Backoff calculation ---
+                // Exponential backoff: BASE * 2^consecutiveFailures, capped
+
+                const fails = (feedConfig.consecutiveFailures ?? 0) + 1; // +1 because recordFailure increments after this call
+                const backoffMinutes = Math.min(BASE_MINUTES * Math.pow(2, fails), MAX_MINUTES);
+                const backoffUntil = new Date(Date.now() + backoffMinutes * 60 * 1000);
+                await FeedStorageService.setBackoffUntil(feedConfig.id, backoffUntil);
+
                 // Check the failure count within the last 24 hours
                 const failureCountLast24h = await FeedStorageService.getFailureCountLast24h(
                     feedConfig.id
@@ -298,15 +321,30 @@ export class FeedPollJob extends Job {
                 // Notify if threshold reached
                 const isPermissionError = false; // Assume not permission error for fetch/parse failures
                 if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    Logger.info(
-                        `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} in last 24h. Notifying.`
+                    // Check if a notification was already sent in the last 24 hours
+                    const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
+                        feedConfig.id
                     );
-                    await this.notifyFeedFailure(
-                        feedConfig,
-                        error,
-                        failureCountLast24h,
-                        isPermissionError
-                    );
+                    const now = new Date();
+                    if (
+                        !lastNotified ||
+                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                    ) {
+                        Logger.info(
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying.`
+                        );
+                        await this.notifyFeedFailure(
+                            feedConfig,
+                            error,
+                            failureCountLast24h,
+                            isPermissionError
+                        );
+                        await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
+                    } else {
+                        Logger.info(
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                        );
+                    }
                 }
             } catch (dbError) {
                 Logger.error(
@@ -675,6 +713,7 @@ export class FeedPollJob extends Job {
             if (allSucceeded) {
                 // All items sent successfully across relevant shards
                 await FeedStorageService.clearFeedFailures(feedConfig.id);
+                await FeedStorageService.clearLastFailureNotification(feedConfig.id);
             } else if (partialSuccess || totalFailure) {
                 // Some or all items failed to send
                 const errorToReport =
@@ -695,15 +734,30 @@ export class FeedPollJob extends Job {
 
                 // Notify if threshold reached
                 if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    Logger.info(
-                        `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying.`
+                    // Check if a notification was already sent in the last 24 hours
+                    const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
+                        feedConfig.id
                     );
-                    await this.notifyFeedFailure(
-                        feedConfig,
-                        errorToReport,
-                        failureCountLast24h,
-                        isPermissionError
-                    );
+                    const now = new Date();
+                    if (
+                        !lastNotified ||
+                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                    ) {
+                        Logger.info(
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying.`
+                        );
+                        await this.notifyFeedFailure(
+                            feedConfig,
+                            errorToReport,
+                            failureCountLast24h,
+                            isPermissionError
+                        );
+                        await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
+                    } else {
+                        Logger.info(
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                        );
+                    }
                 }
             }
         } catch (error: any) {
@@ -743,11 +797,26 @@ export class FeedPollJob extends Job {
                 );
 
                 if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    Logger.info(
-                        `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to post setup/broadcast error. Notifying.`
+                    // Check if a notification was already sent in the last 24 hours
+                    const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
+                        feedConfig.id
                     );
-                    // Assuming not a permission error if it fails before broadcast setup
-                    await this.notifyFeedFailure(feedConfig, error, failureCountLast24h, false);
+                    const now = new Date();
+                    if (
+                        !lastNotified ||
+                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                    ) {
+                        Logger.info(
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to post setup/broadcast error. Notifying.`
+                        );
+                        // Assuming not a permission error if it fails before broadcast setup
+                        await this.notifyFeedFailure(feedConfig, error, failureCountLast24h, false);
+                        await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
+                    } else {
+                        Logger.info(
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                        );
+                    }
                 }
             } catch (dbError) {
                 Logger.error(

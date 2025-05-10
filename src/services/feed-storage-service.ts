@@ -21,6 +21,8 @@ export interface FeedConfig {
     summarize: boolean;
     lastSummary?: string | null;
     recentLinks?: string[] | null;
+    lastFailureNotificationAt?: Date | null;
+    backoffUntil?: Date | null;
 }
 
 // Interface for Category Configuration
@@ -47,6 +49,8 @@ export class FeedStorageService {
             | 'lastChecked'
             | 'lastSummary'
             | 'recentLinks'
+            | 'lastFailureNotificationAt'
+            | 'backoffUntil'
         >
     ): Promise<string> {
         const id = uuidv4(); // Generate UUID in application code
@@ -60,6 +64,8 @@ export class FeedStorageService {
             // createdAt is handled by defaultNow() in pg schema
             // consecutiveFailures defaults to 0 in pg schema
             recentLinks: JSON.stringify([]), // Initialize with empty JSON array string
+            lastFailureNotificationAt: null, // Initialize with null
+            backoffUntil: null, // Initialize with null
         };
 
         try {
@@ -376,6 +382,93 @@ export class FeedStorageService {
                 .where(eq(feeds.id, feedId));
         } catch (error) {
             console.error(`Error updating last checked timestamp for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Gets the last failure notification timestamp for a feed.
+     */
+    public static async getLastFailureNotificationAt(feedId: string): Promise<Date | null> {
+        try {
+            const result = await (db as any)
+                .select({ lastFailureNotificationAt: feeds.lastFailureNotificationAt })
+                .from(feeds)
+                .where(eq(feeds.id, feedId))
+                .limit(1);
+            return result[0]?.lastFailureNotificationAt ?? null;
+        } catch (error) {
+            console.error(`Error getting last failure notification for feed ${feedId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Sets the last failure notification timestamp for a feed to now.
+     */
+    public static async setLastFailureNotificationNow(feedId: string): Promise<void> {
+        try {
+            await (db as any)
+                .update(feeds)
+                .set({ lastFailureNotificationAt: new Date() })
+                .where(eq(feeds.id, feedId));
+        } catch (error) {
+            console.error(`Error setting last failure notification for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Clears the last failure notification timestamp for a feed (sets to null).
+     */
+    public static async clearLastFailureNotification(feedId: string): Promise<void> {
+        try {
+            await (db as any)
+                .update(feeds)
+                .set({ lastFailureNotificationAt: null })
+                .where(eq(feeds.id, feedId));
+        } catch (error) {
+            console.error(`Error clearing last failure notification for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Gets the backoffUntil timestamp for a feed.
+     */
+    public static async getBackoffUntil(feedId: string): Promise<Date | null> {
+        try {
+            const result = await (db as any)
+                .select({ backoffUntil: feeds.backoffUntil })
+                .from(feeds)
+                .where(eq(feeds.id, feedId))
+                .limit(1);
+            return result[0]?.backoffUntil ?? null;
+        } catch (error) {
+            console.error(`Error getting backoffUntil for feed ${feedId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Sets the backoffUntil timestamp for a feed.
+     */
+    public static async setBackoffUntil(feedId: string, until: Date): Promise<void> {
+        try {
+            await (db as any)
+                .update(feeds)
+                .set({ backoffUntil: until })
+                .where(eq(feeds.id, feedId));
+        } catch (error) {
+            console.error(`Error setting backoffUntil for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Clears the backoffUntil timestamp for a feed (sets to null).
+     */
+    public static async clearBackoffUntil(feedId: string): Promise<void> {
+        try {
+            await (db as any).update(feeds).set({ backoffUntil: null }).where(eq(feeds.id, feedId));
+        } catch (error) {
+            console.error(`Error clearing backoffUntil for feed ${feedId}:`, error);
         }
     }
 
