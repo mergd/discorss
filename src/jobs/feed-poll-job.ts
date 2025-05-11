@@ -591,28 +591,34 @@ export class FeedPollJob extends Job {
                             // Base content
                             let contentToSend = `📰 | **${title}**${dateTimestamp}${authorText}\n${linkLine}`;
 
-                            // Append summaries if available and not error messages
+                            // Show Article Summary first if present and not an error
                             if (
                                 item.articleSummary &&
                                 !item.articleSummary.startsWith('Could not generate summary:')
                             ) {
                                 contentToSend += `\n\n**Article Summary:**\n${truncate(item.articleSummary, 1500, true)}`;
                             }
+                            // Then show Comments Summary if present and not an error
                             if (
                                 item.commentsSummary &&
                                 !item.commentsSummary.startsWith('Could not generate summary:')
                             ) {
                                 contentToSend += `\n\n**Comments Summary:**\n${truncate(item.commentsSummary, 1500, true)}`;
                             }
+                            // If both are missing or are error messages, show error(s) only (but not both together)
                             if (
-                                (item.articleSummary &&
+                                (!item.articleSummary ||
                                     item.articleSummary.startsWith(
                                         'Could not generate summary:'
-                                    )) ||
-                                (item.commentsSummary &&
+                                    )) &&
+                                (!item.commentsSummary ||
                                     item.commentsSummary.startsWith('Could not generate summary:'))
                             ) {
-                                contentToSend += `\n\n*(${item.articleSummary || ''} ${item.commentsSummary || ''})*`;
+                                // Prefer article error if both are present, else comments error
+                                const errorMsg = item.articleSummary || item.commentsSummary;
+                                if (errorMsg) {
+                                    contentToSend += `\n\n*(${errorMsg})*`;
+                                }
                             }
 
                             try {
