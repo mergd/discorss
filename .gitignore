@@ -6,8 +6,8 @@
 !/**/config/**/*.example.
 # ignore sqlite
 # *.sqlite
-# Local SQLite database directory
-# /data/
+# Backups
+/data/
 
 # =====================================================
 # Node.js

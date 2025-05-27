@@ -36,6 +36,8 @@
         "db:push": "dotenv -- drizzle-kit push --config=src/drizzle.config.ts",
         "db:studio": "dotenv -- drizzle-kit studio",
         "db:migrate": "dotenv -- drizzle-kit migrate --config=src/drizzle.config.ts",
+        "db:backup": "pnpm run build && node --enable-source-maps dist/scripts/backup-db.js",
+        "db:restore": "pnpm run build && node --enable-source-maps dist/scripts/restore-db.js",
         "docker:build": "docker build -t discord-bot-rss . && docker run -d --name discord-bot-rss discord-bot-rss",
         "docker:run": "docker start discord-bot-rss"
     },
