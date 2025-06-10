@@ -1,4 +1,4 @@
-import { subDays } from 'date-fns';
+import { subHours } from 'date-fns';
 import {
     ChannelType,
     DiscordAPIError,
@@ -15,7 +15,7 @@ import {
     DEFAULT_FREQUENCY_MINUTES,
     FAILURE_NOTIFICATION_THRESHOLD,
     MAX_FREQUENCY_MINUTES,
-    MAX_ITEM_AGE_DAYS,
+    MAX_ITEM_HOURS,
     MAX_MINUTES,
     MIN_FREQUENCY_MINUTES,
 } from '../constants/index.js';
@@ -229,7 +229,7 @@ export class FeedPollJob extends Job {
             const knownRecentLinks = new Set(feedConfig.recentLinks || []); // Use Set for quick lookup
             let latestItemGuid: string | null = null;
             const newItems: ParsedFeedItem[] = [];
-            const twoDaysAgo = subDays(new Date(), MAX_ITEM_AGE_DAYS);
+            const maxTime = subHours(new Date(), MAX_ITEM_HOURS);
 
             // Process items from newest to oldest
             for (let i = 0; i < fetchedFeed.items.length; i++) {
@@ -252,8 +252,8 @@ export class FeedPollJob extends Job {
                     }
                 }
 
-                if (itemDate && itemDate < twoDaysAgo) {
-                    // Logger.info(`[FeedPollJob] Skipping old item (older than ${MAX_ITEM_AGE_DAYS} days) for feed ${feedConfig.id}: ${item.title || item.link}`);
+                if (itemDate && itemDate < maxTime) {
+                    // Logger.info(`[FeedPollJob] Skipping old item (older than ${MAX_ITEM_HOURS} days) for feed ${feedConfig.id}: ${item.title || item.link}`);
                     continue; // Skip item if it's too old
                 }
                 // --- End Date Sanity Check ---
