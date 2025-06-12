@@ -78,7 +78,8 @@ describe('FormatUtils', () => {
             const mockCommand = {
                 name: 'test',
                 id: '123456789012345678',
-            } as ApplicationCommand;
+                toString: undefined,
+            } as unknown as ApplicationCommand;
 
             const result = FormatUtils.commandMention(mockCommand);
             expect(result).toBe('</test:123456789012345678>');
@@ -88,10 +89,23 @@ describe('FormatUtils', () => {
             const mockCommand = {
                 name: 'user',
                 id: '123456789012345678',
-            } as ApplicationCommand;
+                toString: undefined,
+            } as unknown as ApplicationCommand;
 
             const result = FormatUtils.commandMention(mockCommand, ['info']);
             expect(result).toBe('</user info:123456789012345678>');
+        });
+
+        it('should use command.toString when available', () => {
+            const mockCommand = {
+                name: 'test',
+                id: '123456789012345678',
+                toString: vi.fn().mockReturnValue('</custom:9876543210>'),
+            } as unknown as ApplicationCommand;
+
+            const result = FormatUtils.commandMention(mockCommand);
+            expect(result).toBe('</custom:9876543210>');
+            expect(mockCommand.toString).toHaveBeenCalled();
         });
     });
 
