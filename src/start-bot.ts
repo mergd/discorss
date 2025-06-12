@@ -10,6 +10,7 @@ import {
     InfoCommand,
     CategoryCommand,
     FeedCommand,
+    FeedbackCommand,
 } from './commands/chat/index.js';
 import {
     ChatCommandMetadata,
@@ -71,6 +72,7 @@ async function start(): Promise<void> {
         new DevCommand(),
         new HelpCommand(),
         new InfoCommand(),
+        new FeedbackCommand(),
         new FeedCommand(),
         new CategoryCommand(),
     ];

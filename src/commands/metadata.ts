@@ -54,6 +54,21 @@ export const ChatCommandMetadata: {
             },
         ],
     },
+    FEEDBACK: {
+        type: ApplicationCommandType.ChatInput,
+        name: 'feedback',
+        description: 'Send feedback to the developer',
+        dm_permission: true,
+        default_member_permissions: undefined,
+        options: [
+            {
+                type: ApplicationCommandOptionType.String,
+                name: 'message',
+                description: 'The feedback message',
+                required: true,
+            },
+        ],
+    },
     TEST: {
         type: ApplicationCommandType.ChatInput,
         name: 'test',
