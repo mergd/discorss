@@ -16,5 +16,6 @@ export const env = {
     DISCORD_BOT_TOKEN: getEnvVar('DISCORD_BOT_TOKEN'),
     DEVELOPER_IDS: getEnvVar('DEVELOPER_IDS'),
     OPENROUTER_API_KEY: getEnvVar('OPENROUTER_API_KEY', true),
+    FEEDBACK_WEBHOOK_URL: getEnvVar('FEEDBACK_WEBHOOK_URL', true),
     POSTHOG_API_KEY: getEnvVar('POSTHOG_API_KEY', true),
 };
