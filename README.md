@@ -8,7 +8,7 @@ Features:
 - Archive.is links for paywalled content
 - Easy self hosting
 - Free and open source
-- Slash command native – no separate UI like monitorss
+- Slash command native – no separate UI like MonitoRSS
 
 ## Deployment
 
