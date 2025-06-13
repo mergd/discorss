@@ -54,7 +54,7 @@ export function createMockCommandInteraction(overrides = {}) {
     // Create a mock guild member first to ensure consistent user data
     const mockMember = createMockGuildMember();
 
-    return {
+    const interaction: any = {
         id: '987612345678901234',
         user: mockMember.user,
         member: mockMember,
@@ -64,8 +64,19 @@ export function createMockCommandInteraction(overrides = {}) {
                 username: 'TestBot',
             },
         },
-        guild: mockMember.guild,
+        guild: Object.assign({}, mockMember.guild, {
+            members: {
+                me: mockMember,
+                fetchMe: vi.fn().mockResolvedValue(mockMember),
+            },
+        }),
         channel: createMockGuildChannel(),
+        get channelId() {
+            return this.channel.id;
+        },
+        inGuild() {
+            return !!this.guild;
+        },
         commandName: 'test',
         options: {
             getString: vi.fn(),
@@ -82,7 +93,21 @@ export function createMockCommandInteraction(overrides = {}) {
         deferred: false,
         replied: false,
         ...overrides,
-    };
+    } as any;
+
+    interaction.guild.members.me.permissionsIn = vi
+        .fn()
+        .mockImplementation(() => {
+            const perms = interaction.channel.permissionsFor?.(interaction.guild.members.me);
+            if (perms) {
+                return { has: perms.has } as PermissionsBitField;
+            }
+            return new PermissionsBitField(
+                PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel
+            );
+        });
+
+    return interaction;
 }
 
 /**
@@ -182,10 +207,16 @@ export function createMockGuildMember(overrides = {}) {
             add: vi.fn().mockResolvedValue({}),
             remove: vi.fn().mockResolvedValue({}),
         },
-        permissions: new PermissionsBitField(PermissionFlagsBits.SendMessages),
+        permissions: new PermissionsBitField(
+            PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel
+        ),
         permissionsIn: vi
             .fn()
-            .mockReturnValue(new PermissionsBitField(PermissionFlagsBits.SendMessages)),
+            .mockReturnValue(
+                new PermissionsBitField(
+                    PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel
+                )
+            ),
         joinedAt: new Date(),
         voice: {
             channelId: null,
