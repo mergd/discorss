@@ -23,15 +23,21 @@ export class FormatUtils {
         return `<@!${discordId}>`;
     }
 
-    public static commandMention(command: ApplicationCommand, subParts: string[] = []): string {
-        if (command.toString && typeof command.toString === 'function') {
-            // Use built-in method if available in this version of discord.js
+    public static commandMention(
+        command: ApplicationCommand,
+        subParts: string[] = []
+    ): string {
+        if (
+            typeof command.toString === 'function' &&
+            command.toString !== Object.prototype.toString
+        ) {
+            // Use built-in method if provided by discord.js
             return command.toString();
-        } else {
-            // Fallback to manual formatting
-            let name = [command.name, ...subParts].join(' ');
-            return `</${name}:${command.id}>`;
         }
+
+        // Fallback to manual formatting when no custom formatter exists
+        const name = [command.name, ...subParts].join(' ');
+        return `</${name}:${command.id}>`;
     }
 
     public static duration(milliseconds: number, langCode: Locale): string {

@@ -54,7 +54,7 @@ export function createMockCommandInteraction(overrides = {}) {
     // Create a mock guild member first to ensure consistent user data
     const mockMember = createMockGuildMember();
 
-    return {
+    const interaction: any = {
         id: '987612345678901234',
         user: mockMember.user,
         member: mockMember,
@@ -64,8 +64,28 @@ export function createMockCommandInteraction(overrides = {}) {
                 username: 'TestBot',
             },
         },
-        guild: mockMember.guild,
+        guild: {
+            id: mockMember.guild.id,
+            name: mockMember.guild.name,
+            members: {
+                me: {
+                    permissions: new PermissionsBitField(
+                        PermissionFlagsBits.SendMessages |
+                            PermissionFlagsBits.ViewChannel
+                    ),
+                    permissionsIn: vi.fn(),
+                },
+                fetchMe: vi.fn().mockResolvedValue({
+                    permissions: new PermissionsBitField(
+                        PermissionFlagsBits.SendMessages |
+                            PermissionFlagsBits.ViewChannel
+                    ),
+                    permissionsIn: vi.fn(),
+                }),
+            },
+        },
         channel: createMockGuildChannel(),
+        channelId: '444555666777888999',
         commandName: 'test',
         options: {
             getString: vi.fn(),
@@ -75,6 +95,7 @@ export function createMockCommandInteraction(overrides = {}) {
             getSubcommand: vi.fn(),
             getSubcommandGroup: vi.fn(),
         },
+        inGuild: vi.fn().mockReturnValue(true),
         reply: vi.fn().mockResolvedValue({}),
         editReply: vi.fn().mockResolvedValue({}),
         deferReply: vi.fn().mockResolvedValue({}),
@@ -83,6 +104,15 @@ export function createMockCommandInteraction(overrides = {}) {
         replied: false,
         ...overrides,
     };
+
+    interaction.guild.members.me.permissionsIn.mockImplementation(() => {
+        return interaction.channel.permissionsFor(interaction.guild.members.me);
+    });
+    interaction.guild.members.fetchMe.mockResolvedValue(
+        interaction.guild.members.me
+    );
+
+    return interaction;
 }
 
 /**
@@ -98,6 +128,9 @@ export function createMockGuildChannel(overrides = {}) {
             user: { id: '987654321098765432' },
         },
         type: ChannelType.GuildText,
+        permissionsFor: vi.fn().mockReturnValue({
+            has: vi.fn().mockReturnValue(true),
+        }),
     };
 
     // Add overrides
