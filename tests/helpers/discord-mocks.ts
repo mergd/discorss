@@ -58,6 +58,7 @@ export function createMockCommandInteraction(overrides = {}) {
         id: '987612345678901234',
         user: mockMember.user,
         member: mockMember,
+        inGuild: vi.fn().mockReturnValue(true),
         client: {
             user: {
                 id: '987654321098765432',
@@ -66,6 +67,7 @@ export function createMockCommandInteraction(overrides = {}) {
         },
         guild: mockMember.guild,
         channel: createMockGuildChannel(),
+        channelId: '444555666777888999',
         commandName: 'test',
         options: {
             getString: vi.fn(),
@@ -169,11 +171,18 @@ export function createMockGuildMember(overrides = {}) {
     // Create a mock user first
     const mockUser = createMockUser();
 
+    // Create a basic guild object so we can reference `me`
+    const guild: any = {
+        id: '111222333444555666',
+        name: 'Test Guild',
+        members: {},
+    };
+
     // Create base object with properties we need
     const baseMember = {
         id: mockUser.id,
         user: mockUser,
-        guild: { id: '111222333444555666', name: 'Test Guild' },
+        guild: guild,
         displayName: mockUser.username,
         nickname: null,
         roles: {
@@ -182,10 +191,16 @@ export function createMockGuildMember(overrides = {}) {
             add: vi.fn().mockResolvedValue({}),
             remove: vi.fn().mockResolvedValue({}),
         },
-        permissions: new PermissionsBitField(PermissionFlagsBits.SendMessages),
+        permissions: new PermissionsBitField(
+            PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages
+        ),
         permissionsIn: vi
             .fn()
-            .mockReturnValue(new PermissionsBitField(PermissionFlagsBits.SendMessages)),
+            .mockReturnValue(
+                new PermissionsBitField(
+                    PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages
+                )
+            ),
         joinedAt: new Date(),
         voice: {
             channelId: null,
@@ -222,6 +237,10 @@ export function createMockGuildMember(overrides = {}) {
         // Make sure the member correctly identifies as a GuildMember
         constructor: { value: GuildMember },
     });
+
+    // Link the member back to the guild as `me`
+    (guild as any).members.me = mockMember;
+    (guild as any).members.fetchMe = vi.fn().mockResolvedValue(mockMember);
 
     return mockMember;
 }
