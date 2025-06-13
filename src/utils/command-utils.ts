@@ -71,7 +71,9 @@ export class CommandUtils {
                     return false;
                 }
 
-                let channelPerms = me.permissionsIn(intr.channelId);
+                let channelPerms = intr.channel?.permissionsFor
+                    ? intr.channel.permissionsFor(me)
+                    : me.permissionsIn(intr.channelId);
                 if (!channelPerms) {
                     await InteractionUtils.send(
                         intr,

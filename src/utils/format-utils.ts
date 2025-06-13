@@ -24,7 +24,11 @@ export class FormatUtils {
     }
 
     public static commandMention(command: ApplicationCommand, subParts: string[] = []): string {
-        if (command.toString && typeof command.toString === 'function') {
+        if (
+            command.toString &&
+            typeof command.toString === 'function' &&
+            command.toString !== Object.prototype.toString
+        ) {
             // Use built-in method if available in this version of discord.js
             return command.toString();
         } else {
