@@ -408,7 +408,6 @@ export class FeedCommand implements Command {
                     }
                     case 'remove': {
                         const feedIdentifier = intr.options.getString('feed_id', true);
-                        // Use current channel if channel option is null
                         const targetChannel = intr.options.getChannel('channel') ?? intr.channel;
 
                         if (
@@ -424,45 +423,35 @@ export class FeedCommand implements Command {
                         }
 
                         try {
-                            // Attempt removal directly first (handles full ID and nickname cases)
-                            let removed = FeedStorageService.removeFeed(
-                                feedIdentifier,
+                            // First, find the feed by nickname or short ID prefix to get the full ID
+                            const feedsInChannel = await FeedStorageService.getFeeds(
+                                intr.guild.id,
+                                targetChannel.id
+                            );
+                            const targetFeed = feedsInChannel.find(
+                                f =>
+                                    f.nickname?.toLowerCase() === feedIdentifier.toLowerCase() ||
+                                    f.id.startsWith(feedIdentifier)
+                            );
+
+                            if (!targetFeed) {
+                                await InteractionUtils.editReply(
+                                    intr,
+                                    `❓ Could not find a feed with Nickname or Short ID \`${feedIdentifier}\` in <#${targetChannel.id}>.`
+                                );
+                                return;
+                            }
+
+                            // Now, attempt removal using the full, resolved feed ID
+                            const removed = await FeedStorageService.removeFeed(
+                                targetFeed.id,
                                 targetChannel.id,
                                 intr.guild.id
                             );
-                            let feedIdToRemove: string | null = null; // Store the ID for PostHog
-
-                            // If not removed and identifier looks like a short ID, try searching by short ID
-                            if (
-                                !removed &&
-                                feedIdentifier.length === 8 &&
-                                /^[a-f0-9-]+$/.test(feedIdentifier)
-                            ) {
-                                const feedsInChannel: FeedConfig[] =
-                                    await FeedStorageService.getFeeds(
-                                        intr.guild.id,
-                                        targetChannel.id
-                                    );
-                                const matchingFeed = feedsInChannel.find(f =>
-                                    f.id.startsWith(feedIdentifier)
-                                );
-                                if (matchingFeed) {
-                                    feedIdToRemove = matchingFeed.id; // Get the full ID
-                                    removed = FeedStorageService.removeFeed(
-                                        matchingFeed.id,
-                                        targetChannel.id,
-                                        intr.guild.id
-                                    );
-                                } else {
-                                    feedIdToRemove = feedIdentifier; // Use the provided identifier if no match
-                                }
-                            } else {
-                                feedIdToRemove = feedIdentifier; // Use the provided identifier if removed directly
-                            }
 
                             if (removed) {
                                 // --- PostHog Tracking --- START
-                                if (posthog && feedIdToRemove) {
+                                if (posthog) {
                                     posthog.capture({
                                         distinctId: intr.user.id,
                                         event: 'feed_removed',
@@ -470,7 +459,7 @@ export class FeedCommand implements Command {
                                             guildId: intr.guild.id,
                                             channelId: targetChannel.id,
                                             removedFeedIdentifier: feedIdentifier, // What user provided
-                                            removedFeedId: feedIdToRemove, // Actual ID removed (if found)
+                                            removedFeedId: targetFeed.id, // Actual ID removed
                                             removedBy: intr.user.id,
                                         },
                                         groups: { guild: intr.guild.id },
@@ -478,18 +467,28 @@ export class FeedCommand implements Command {
                                 }
                                 // --- PostHog Tracking --- END
 
+                                const title = targetFeed.nickname || 'Untitled Feed';
+                                const shortId = getShortId(targetFeed.id);
+                                const url = targetFeed.url;
+
                                 await InteractionUtils.editReply(
                                     intr,
-                                    `✅ Feed \`${feedIdentifier}\` removed successfully from <#${targetChannel.id}>.`
+                                    `✅ Feed **${title}** (${inlineCode(shortId)}) pointing to <${url}> has been removed from <#${targetChannel.id}>.`
                                 );
                             } else {
+                                // This is an edge case, but good to handle
                                 await InteractionUtils.editReply(
                                     intr,
-                                    `❓ Could not find a feed with ID, Short ID, or Nickname \`${feedIdentifier}\` in <#${targetChannel.id}>.`
+                                    `❌ Failed to remove feed \`${feedIdentifier}\`. It might have been deleted by another user just now. Please try listing the feeds again.`
                                 );
                             }
                         } catch (error) {
-                            console.error('Error removing feed:', error);
+                            Logger.error('Error removing feed:', {
+                                guildId: intr.guild.id,
+                                channelId: targetChannel.id,
+                                feedIdentifier,
+                                error,
+                            });
                             await InteractionUtils.editReply(
                                 intr,
                                 '❌ An error occurred while removing the feed. Please check the logs.'
