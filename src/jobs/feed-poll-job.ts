@@ -568,7 +568,11 @@ export class FeedPollJob extends Job {
                             }
 
                             // --- Link Formatting ---
-                            let linkLine = link ? `<${link}>` : 'No link available.';
+                            let displayLink = link;
+                            if (displayLink?.includes('youtube.com/shorts/')) {
+                                displayLink = displayLink.replace('/shorts/', '/watch?v=');
+                            }
+                            let linkLine = displayLink ? `<${displayLink}>` : 'No link available.';
                             let hasPaywalledLink = false; // Track if we added an archive link
                             if (link && isPaywalledInner(link, paywalledDomainsList)) {
                                 linkLine += ` | [Archive](${getArchiveUrlInner(link)})`;
