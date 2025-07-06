@@ -1,19 +1,19 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateText } from 'ai';
 import fetch from 'node-fetch';
+import { JSDOM } from 'jsdom';
 import { MODEL_NAME } from '../constants/misc.js';
-import { Logger } from '../services/logger.js'; // Added Logger
-import { posthog } from './analytics.js'; // Import posthog
+import { Logger } from '../services/logger.js';
+import { posthog } from './analytics.js';
 import { env } from './env.js';
 
-// Initialize OpenRouter Client
 const openrouter = createOpenRouter({
     apiKey: env.OPENROUTER_API_KEY,
 });
 
 /**
- * Fetches the HTML content of a page, attempts to extract the body,
- * and cleans it by removing tags and normalizing whitespace.
+ * Fetches the HTML content of a page, uses jsdom to parse and extract meaningful content,
+ * and cleans it by removing unwanted elements and normalizing whitespace.
  * @param url The URL of the page to fetch.
  * @returns The cleaned text content or null if fetching/parsing fails.
  */
@@ -22,16 +22,16 @@ export async function fetchPageContent(url: string): Promise<string | null> {
         Logger.info(`[FeedSummarizer] Fetching page content for URL: ${url}`);
         const res = await fetch(url, {
             headers: {
-                'User-Agent': 'DiscorssBot/1.0 (Feed Summarization)', // More specific UA
-                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', // Common Accept header
+                'User-Agent': 'DiscorssBot/1.0 (Feed Summarization)',
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             },
-            signal: AbortSignal.timeout(15000), // Add timeout using AbortSignal
+            signal: AbortSignal.timeout(15000),
         });
+
         if (!res.ok) {
             Logger.warn(
                 `[FeedSummarizer] Failed to fetch page content from ${url}. Status: ${res.status}`
             );
-            // Capture failure in PostHog
             posthog?.capture({
                 distinctId: 'system_summarizer',
                 event: 'page_fetch_error',
@@ -40,7 +40,6 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             return null;
         }
 
-        // Check content type - Avoid parsing non-HTML content types like images/PDFs
         const contentType = res.headers.get('content-type');
         if (
             contentType &&
@@ -50,7 +49,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             Logger.warn(
                 `[FeedSummarizer] Skipping non-HTML content type (${contentType}) for URL: ${url}`
             );
-            return null; // Skip non-html pages
+            return null;
         }
 
         const html = await res.text();
@@ -58,35 +57,93 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             `[FeedSummarizer] Successfully fetched HTML for URL: ${url}. Length: ${html.length}`
         );
 
-        // Attempt to extract body content first
-        const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        let textContent = '';
+        // Parse HTML with jsdom
+        const dom = new JSDOM(html);
+        const document = dom.window.document;
 
-        if (bodyMatch && bodyMatch[1]) {
-            textContent = bodyMatch[1];
-            // Logger.info(`[FeedSummarizer] Extracted body content for URL: ${url}.`); // Less verbose logging
-        } else {
-            // Fallback to using the whole HTML if body tag isn't found
-            textContent = html;
-            Logger.info(`[FeedSummarizer] Body tag not found, using full HTML for URL: ${url}.`);
+        // Remove unwanted elements
+        const unwantedSelectors = [
+            'script',
+            'style',
+            'nav',
+            'header',
+            'footer',
+            '.advertisement',
+            '.ads',
+            '.sidebar',
+            '.menu',
+            '.navigation',
+            '.social-share',
+            '.comments-section',
+            '.related-posts',
+            '[class*="ad-"]',
+            '[id*="ad-"]',
+            'iframe',
+            'noscript',
+        ];
+
+        unwantedSelectors.forEach(selector => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(el => el.remove());
+        });
+
+        // Try to find main content using common selectors
+        const contentSelectors = [
+            'main',
+            'article',
+            '[role="main"]',
+            '.content',
+            '.post-content',
+            '.entry-content',
+            '.article-content',
+            '.main-content',
+            '#content',
+            '#main-content',
+            '.post-body',
+            '.article-body',
+        ];
+
+        let mainContent = null;
+        for (const selector of contentSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+                mainContent = element;
+                Logger.info(`[FeedSummarizer] Found main content using selector: ${selector}`);
+                break;
+            }
         }
 
-        // Basic cleaning: remove script/style tags, then all other tags, normalize whitespace
+        // Fallback to body if no main content found
+        if (!mainContent) {
+            mainContent = document.body;
+            Logger.info(`[FeedSummarizer] Using body as fallback for main content`);
+        }
+
+        if (!mainContent) {
+            Logger.warn(`[FeedSummarizer] No content found for URL: ${url}`);
+            return null;
+        }
+
+        // Extract text content
+        let textContent = mainContent.textContent || '';
+
+        // Clean up whitespace and normalize
         const cleanedText = textContent
-            .replace(/<script[^>]*>.*?<\/script>/gis, ' ') // Remove script blocks
-            .replace(/<style[^>]*>.*?<\/style>/gis, ' ') // Remove style blocks
-            .replace(/<[^>]+>/g, ' ') // Remove remaining HTML tags
-            .replace(/\s+/g, ' ') // Normalize whitespace
+            .replace(/\s+/g, ' ')
+            .replace(/\n\s*\n/g, '\n')
             .trim();
 
-        // Logger.info(`[FeedSummarizer] Cleaned text length for URL ${url}: ${cleanedText.length}`); // Less verbose logging
-        return cleanedText.substring(0, 15000); // Limit content length
+        Logger.info(
+            `[FeedSummarizer] Extracted content length for URL ${url}: ${cleanedText.length}`
+        );
+
+        // Return limited content
+        return cleanedText.substring(0, 15000);
     } catch (error: any) {
         Logger.error(
             `[FeedSummarizer] Error fetching or processing page content from ${url}:`,
             error
         );
-        // Capture specific error in PostHog
         posthog?.capture({
             distinctId: 'system_summarizer',
             event: 'page_fetch_exception',
