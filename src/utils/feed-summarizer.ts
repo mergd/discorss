@@ -1,6 +1,7 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateText } from 'ai';
 import fetch from 'node-fetch';
+import { JSDOM } from 'jsdom';
 import { MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js'; // Added Logger
 import { posthog } from './analytics.js'; // Import posthog
@@ -58,28 +59,45 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             `[FeedSummarizer] Successfully fetched HTML for URL: ${url}. Length: ${html.length}`
         );
 
-        // Attempt to extract body content first
-        const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        let textContent = '';
+        // Parse HTML with jsdom for better client-side content handling
+        const dom = new JSDOM(html, {
+            url: url,
+            runScripts: 'dangerously', // Enable scripts to run for client-side rendered content
+            resources: 'usable',
+            pretendToBeVisual: true,
+        });
 
-        if (bodyMatch && bodyMatch[1]) {
-            textContent = bodyMatch[1];
-            // Logger.info(`[FeedSummarizer] Extracted body content for URL: ${url}.`); // Less verbose logging
-        } else {
-            // Fallback to using the whole HTML if body tag isn't found
-            textContent = html;
-            Logger.info(`[FeedSummarizer] Body tag not found, using full HTML for URL: ${url}.`);
+        const document = dom.window.document;
+
+        // Wait briefly for any immediate script execution
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Remove script and style elements entirely
+        const scriptsAndStyles = document.querySelectorAll('script, style, noscript');
+        scriptsAndStyles.forEach(el => el.remove());
+
+        // Try to get main content area first, fallback to body
+        let contentElement = document.querySelector('main, article, [role="main"], .content, #content, .post, .article');
+        if (!contentElement) {
+            contentElement = document.body;
         }
 
-        // Basic cleaning: remove script/style tags, then all other tags, normalize whitespace
+        if (!contentElement) {
+            Logger.warn(`[FeedSummarizer] No body element found for URL: ${url}`);
+            dom.window.close();
+            return null;
+        }
+
+        // Extract text content and clean it up
+        const textContent = contentElement.textContent || '';
         const cleanedText = textContent
-            .replace(/<script[^>]*>.*?<\/script>/gis, ' ') // Remove script blocks
-            .replace(/<style[^>]*>.*?<\/style>/gis, ' ') // Remove style blocks
-            .replace(/<[^>]+>/g, ' ') // Remove remaining HTML tags
             .replace(/\s+/g, ' ') // Normalize whitespace
             .trim();
 
-        // Logger.info(`[FeedSummarizer] Cleaned text length for URL ${url}: ${cleanedText.length}`); // Less verbose logging
+        // Clean up jsdom resources
+        dom.window.close();
+
+        Logger.info(`[FeedSummarizer] Extracted content for URL ${url}. Length: ${cleanedText.length}`);
         return cleanedText.substring(0, 15000); // Limit content length
     } catch (error: any) {
         Logger.error(
