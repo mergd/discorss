@@ -6,6 +6,7 @@ import { MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js'; // Added Logger
 import { posthog } from './analytics.js'; // Import posthog
 import { env } from './env.js';
+import { calculateReadTime } from './read-time.js';
 
 // Initialize OpenRouter Client
 const openrouter = createOpenRouter({
@@ -77,7 +78,9 @@ export async function fetchPageContent(url: string): Promise<string | null> {
         scriptsAndStyles.forEach(el => el.remove());
 
         // Try to get main content area first, fallback to body
-        let contentElement = document.querySelector('main, article, [role="main"], .content, #content, .post, .article');
+        let contentElement = document.querySelector(
+            'main, article, [role="main"], .content, #content, .post, .article'
+        );
         if (!contentElement) {
             contentElement = document.body;
         }
@@ -97,7 +100,9 @@ export async function fetchPageContent(url: string): Promise<string | null> {
         // Clean up jsdom resources
         dom.window.close();
 
-        Logger.info(`[FeedSummarizer] Extracted content for URL ${url}. Length: ${cleanedText.length}`);
+        Logger.info(
+            `[FeedSummarizer] Extracted content for URL ${url}. Length: ${cleanedText.length}`
+        );
         return cleanedText.substring(0, 15000); // Limit content length
     } catch (error: any) {
         Logger.error(
@@ -122,12 +127,19 @@ export async function summarizeContent(
     articleContent: string | null,
     commentsContent: string | null,
     sourceUrl?: string // Keep sourceUrl optional for flexibility
-): Promise<{ articleSummary: string | null; commentsSummary: string | null }> {
+): Promise<{
+    articleSummary: string | null;
+    commentsSummary: string | null;
+    articleReadTime: number | null;
+}> {
     let articleSummary: string | null = null;
     let commentsSummary: string | null = null;
+    let articleReadTime: number | null = null;
 
     if (articleContent) {
         articleSummary = await summarizeSingleContent(articleContent, 'ARTICLE CONTENT', sourceUrl);
+        // Calculate read time for the original article content
+        articleReadTime = calculateReadTime(articleContent);
     }
     if (commentsContent) {
         commentsSummary = await summarizeSingleContent(
@@ -136,7 +148,7 @@ export async function summarizeContent(
             sourceUrl
         );
     }
-    return { articleSummary, commentsSummary };
+    return { articleSummary, commentsSummary, articleReadTime };
 }
 
 async function summarizeSingleContent(

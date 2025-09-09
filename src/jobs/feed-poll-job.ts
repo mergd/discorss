@@ -29,6 +29,7 @@ import {
 import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
+import { formatReadTime } from '../utils/read-time.js';
 import { Job } from './job.js';
 
 interface ParsedFeedItem {
@@ -45,6 +46,7 @@ interface ParsedFeedItem {
     comments?: string;
     articleSummary?: string;
     commentsSummary?: string;
+    articleReadTime?: number;
 }
 
 const feedCheckIntervals: { [feedId: string]: NodeJS.Timeout } = {};
@@ -436,9 +438,10 @@ export class FeedPollJob extends Job {
                                 commentsContent,
                                 sourceUrl
                             );
-                            // Store both summaries in the item
+                            // Store summaries and read time in the item
                             item.articleSummary = summaries.articleSummary;
                             item.commentsSummary = summaries.commentsSummary;
+                            item.articleReadTime = summaries.articleReadTime;
                             if (
                                 (summaries.articleSummary &&
                                     !summaries.articleSummary.startsWith(
@@ -600,7 +603,10 @@ export class FeedPollJob extends Job {
                                 item.articleSummary &&
                                 !item.articleSummary.startsWith('Could not generate summary:')
                             ) {
-                                contentToSend += `\n\n**Article Summary:**\n${truncate(item.articleSummary, 1500, true)}`;
+                                const readTimeText = item.articleReadTime
+                                    ? ` *${formatReadTime(item.articleReadTime)}*`
+                                    : '';
+                                contentToSend += `\n\n**Article Summary:**${readTimeText}\n${truncate(item.articleSummary, 1500, true)}`;
                             }
                             // Then show Comments Summary if present and not an error
                             if (
