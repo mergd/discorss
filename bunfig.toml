@@ -1,0 +1,16 @@
+[test]
+# Test configuration for Bun
+root = "."
+preload = []
+
+[install]
+# Install configuration
+cache = "disable"
+optional = true
+dev = true
+peer = true
+production = true
+lockfile = true
+dryRun = false
+frozenLockfile = false
+exact = false

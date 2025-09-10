@@ -1,11 +1,8 @@
 # Dockerfile
 
 # ---- Base Stage ----
-# Use a Node.js base image (e.g., Node 20 Slim)
-FROM node:20-slim AS base
-
-# Install pnpm globally
-RUN npm install -g pnpm
+# Use Bun's official image
+FROM oven/bun:1 AS base
 
 WORKDIR /usr/src/app
 
@@ -13,11 +10,11 @@ WORKDIR /usr/src/app
 # Install dependencies separately to leverage Docker cache
 FROM base AS deps
 
-# Copy package.json and the pnpm lockfile
-COPY package.json pnpm-lock.yaml ./
+# Copy package.json and optionally the bun lockfile
+COPY package.json ./
+COPY bun.lockb* ./
 # Install all dependencies (including devDependencies needed for build)
-# Use --frozen-lockfile for reproducible installs
-RUN pnpm install --frozen-lockfile
+RUN bun install
 
 # ---- Build Stage ----
 # Build the TypeScript application
@@ -28,7 +25,7 @@ COPY --from=deps /usr/src/app/node_modules ./node_modules
 # Copy the rest of the application source code
 COPY . .
 # Run the build script defined in package.json
-RUN pnpm run build
+RUN bun run build
 
 # ---- Production Stage ----
 # Create the final, smaller production image
@@ -37,7 +34,8 @@ FROM base
 WORKDIR /usr/src/app
 
 # Copy essential files for running the application
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
+COPY bun.lockb* ./
 COPY --from=deps /usr/src/app/node_modules ./node_modules
 COPY --from=build /usr/src/app/dist ./dist
 COPY config ./config
@@ -47,7 +45,7 @@ COPY src/drizzle.config.ts ./src/drizzle.config.ts
 COPY drizzle/migrations ./drizzle/migrations
 # Define the command to run migrations, register commands, and then start the app
 # Use our custom migration script that handles conflicts gracefully
-CMD ["sh", "-c", " node --enable-source-maps dist/start-bot.js commands register && node dist/start-manager.js"]
+CMD ["sh", "-c", "bun --enable-source-maps dist/start-bot.js commands register && bun dist/start-manager.js"]
 
 # Optional: Expose the API port if used (check config/config.json)
 # Default from template might be 3000 or similar

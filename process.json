@@ -3,7 +3,8 @@
         {
             "name": "my-bot",
             "script": "dist/start-manager.js",
-            "node_args": ["--enable-source-maps"],
+            "interpreter": "bun",
+            "interpreter_args": ["--enable-source-maps"],
             "restart_delay": 10000
         }
     ]
