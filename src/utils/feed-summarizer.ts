@@ -60,18 +60,15 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             `[FeedSummarizer] Successfully fetched HTML for URL: ${url}. Length: ${html.length}`
         );
 
-        // Parse HTML with jsdom for better client-side content handling
+        // Parse HTML with jsdom for content extraction (no script execution)
         const dom = new JSDOM(html, {
             url: url,
-            runScripts: 'dangerously', // Enable scripts to run for client-side rendered content
+            runScripts: 'outside-only', // Much safer and lighter than 'dangerously'
             resources: 'usable',
-            pretendToBeVisual: true,
+            pretendToBeVisual: false, // Reduce memory footprint
         });
 
         const document = dom.window.document;
-
-        // Wait briefly for any immediate script execution
-        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Remove script and style elements entirely
         const scriptsAndStyles = document.querySelectorAll('script, style, noscript');

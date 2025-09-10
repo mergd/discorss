@@ -11,7 +11,9 @@ console.log('[DB] Using PostgreSQL');
 const connectionString = process.env.DATABASE_URL;
 const pgClient = postgres(connectionString, {
     ssl: connectionString.includes('sslmode=require') ? 'require' : undefined,
-    max: 1,
+    max: 5, // Increase connection pool size
+    idle_timeout: 20, // Close idle connections after 20 seconds
+    max_lifetime: 60 * 30, // Close connections after 30 minutes
 });
 const dbInstance = drizzlePg(pgClient, { schema, logger: true });
 

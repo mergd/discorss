@@ -9,7 +9,6 @@ import {
     PermissionsString,
     User,
 } from 'discord.js';
-import Parser from 'rss-parser';
 import { ITEMS_PER_PAGE, PAGINATION_TIMEOUT } from '../../constants/index.js';
 import { getArchiveUrl, isPaywalled } from '../../constants/paywalled-sites.js';
 import { EventData } from '../../models/internal-models.js';
@@ -20,12 +19,8 @@ import { fetchPageContent, summarizeContent } from '../../utils/feed-summarizer.
 import { InteractionUtils, StringUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
-// Initialize RSS Parser
-const parser = new Parser({
-    customFields: {
-        item: ['guid', 'isoDate', 'creator', 'author', 'content', 'contentSnippet', 'comments'],
-    },
-});
+// Use shared RSS Parser instance to reduce memory footprint
+import { getRSSParser } from '../../utils/rss-parser.js';
 
 // Helper to get a short ID (first 8 chars of UUID)
 function getShortId(uuid: string): string {
@@ -186,7 +181,8 @@ export class FeedCommand implements Command {
                             if (!finalNickname) {
                                 try {
                                     console.log(`Attempting to auto-nickname feed: ${url}`);
-                                    const feed = await parser.parseURL(url);
+                                    const rssParser = getRSSParser();
+                                    const feed = await rssParser.parseURL(url);
                                     if (feed.title) {
                                         finalNickname = feed.title.trim();
                                         console.log(`Auto-nickname found: "${finalNickname}"`);
@@ -220,7 +216,8 @@ export class FeedCommand implements Command {
 
                             if (summarize) {
                                 try {
-                                    const feed = await parser.parseURL(url);
+                                    const rssParser = getRSSParser();
+                                    const feed = await rssParser.parseURL(url);
                                     const firstItem = feed.items?.[0];
 
                                     if (firstItem) {
@@ -829,7 +826,8 @@ export class FeedCommand implements Command {
                                 // Try to re-summarize latest item
                                 let contentToSummarize = '';
                                 try {
-                                    const feed = await parser.parseURL(targetFeed.url);
+                                    const rssParser = getRSSParser();
+                                    const feed = await rssParser.parseURL(targetFeed.url);
                                     if (feed.items && feed.items[0] && feed.items[0].content) {
                                         contentToSummarize = feed.items[0].content;
                                     } else if (feed.items && feed.items[0] && feed.items[0].link) {
@@ -865,7 +863,8 @@ export class FeedCommand implements Command {
                         const url = intr.options.getString('url', true);
                         const summarize = intr.options.getBoolean('summarize') ?? false;
                         try {
-                            const feed = await parser.parseURL(url);
+                                    const rssParser = getRSSParser();
+                                    const feed = await rssParser.parseURL(url);
                             const embed = new EmbedBuilder()
                                 .setTitle(
                                     `Test Feed: ${StringUtils.truncate(feed.title || 'No Title', 150)}`
@@ -1074,9 +1073,9 @@ ${linkLine}${snippet}`;
                             }
 
                             // Feed found, now try to fetch and parse it
-                            const parser = new Parser();
                             try {
-                                const feed = await parser.parseURL(targetFeed.url);
+                                const rssParser = getRSSParser();
+                                const feed = await rssParser.parseURL(targetFeed.url);
                                 const embed = new EmbedBuilder()
                                     .setTitle(
                                         `Poke Result: ${feed.title || targetFeed.nickname || 'No Title'}`
@@ -1201,7 +1200,8 @@ ${linkLine}${snippet}`;
 
                         // Validate channel ID by trying to fetch the feed
                         try {
-                            const feed = await parser.parseURL(feedUrl);
+                            const rssParser = getRSSParser();
+                            const feed = await rssParser.parseURL(feedUrl);
                             if (feed.title) {
                                 feedNickname = feed.title.trim();
                             } else {
@@ -1226,7 +1226,8 @@ ${linkLine}${snippet}`;
                             // Attempt summarization if requested (usually from video link/description)
                             if (summarize) {
                                 try {
-                                    const feed = await parser.parseURL(feedUrl);
+                                    const rssParser = getRSSParser();
+                                    const feed = await rssParser.parseURL(feedUrl);
                                     const firstItem = feed.items?.[0];
                                     if (firstItem?.link) {
                                         // YouTube feeds don't have typical article content, summarize based on link/metadata?

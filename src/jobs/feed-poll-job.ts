@@ -30,6 +30,7 @@ import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
 import { formatReadTime } from '../utils/read-time.js';
+import { getRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
 interface ParsedFeedItem {
@@ -51,6 +52,7 @@ interface ParsedFeedItem {
 
 const feedCheckIntervals: { [feedId: string]: NodeJS.Timeout } = {};
 const categoryFrequencies: Map<string, number> = new Map();
+const feedLastChecked: { [feedId: string]: number } = {}; // Track last check times
 
 // Store enum values for context passing
 const GuildTextChannelTypeValue = ChannelType.GuildText; // 0
@@ -85,25 +87,10 @@ export class FeedPollJob extends Job {
     public log: boolean = false; // Disable default interval logging, we log activity manually
 
     private manager: ShardingManager;
-    private parser: Parser<any, ParsedFeedItem>;
 
     constructor(manager: ShardingManager) {
         super();
         this.manager = manager;
-        // Configure parser - add custom fields
-        this.parser = new Parser({
-            customFields: {
-                item: [
-                    'guid',
-                    'isoDate',
-                    'creator',
-                    'author',
-                    'content',
-                    'contentSnippet',
-                    'comments',
-                ],
-            },
-        });
     }
 
     public async run(): Promise<void> {
@@ -208,7 +195,8 @@ export class FeedPollJob extends Job {
         }
 
         try {
-            const fetchedFeed = await this.parser.parseURL(feedConfig.url);
+            const parser = getRSSParser();
+            const fetchedFeed = await parser.parseURL(feedConfig.url);
 
             // Update last checked time regardless of items found, as long as fetch succeeded
             await FeedStorageService.updateLastChecked(feedConfig.id);
