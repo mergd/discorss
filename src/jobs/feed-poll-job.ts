@@ -14,6 +14,7 @@ import {
     BASE_MINUTES,
     DEFAULT_FREQUENCY_MINUTES,
     FAILURE_NOTIFICATION_THRESHOLD,
+    FAILURE_QUIET_PERIOD_HOURS,
     MAX_FREQUENCY_MINUTES,
     MAX_ITEM_HOURS,
     MAX_MINUTES,
@@ -294,8 +295,10 @@ export class FeedPollJob extends Job {
                 `[FeedPollJob] Error checking feed ${feedConfig.id} (${feedConfig.url}): ${errorMessage}`
             );
             
-            // Send user-friendly error message to channel (rate limited)
-            await this.sendFeedErrorMessage(feedConfig, error, 'fetch');
+            // Send user-friendly error message to channel (rate limited) - only if not ignoring errors
+            if (!feedConfig.ignoreErrors) {
+                await this.sendFeedErrorMessage(feedConfig, error, 'fetch');
+            }
             
             try {
                 // Record the failure event
@@ -314,20 +317,21 @@ export class FeedPollJob extends Job {
                     feedConfig.id
                 );
 
-                // Notify if threshold reached
+                // Notify if threshold reached and failure notifications are enabled
                 const isPermissionError = false; // Assume not permission error for fetch/parse failures
-                if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    // Check if a notification was already sent in the last 24 hours
+                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                    // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
                     );
                     const now = new Date();
+                    const quietPeriodMs = FAILURE_QUIET_PERIOD_HOURS * 60 * 60 * 1000;
                     if (
                         !lastNotified ||
-                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                        now.getTime() - new Date(lastNotified).getTime() > quietPeriodMs
                     ) {
                         Logger.info(
-                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying.`
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to fetch failure. Notifying and entering ${FAILURE_QUIET_PERIOD_HOURS}h quiet period.`
                         );
                         await this.notifyFeedFailure(
                             feedConfig,
@@ -338,7 +342,7 @@ export class FeedPollJob extends Job {
                         await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
                     } else {
                         Logger.info(
-                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last ${FAILURE_QUIET_PERIOD_HOURS} hours. Still in quiet period.`
                         );
                     }
                 }
@@ -463,8 +467,10 @@ export class FeedPollJob extends Job {
                             fetchOrSummarizeError
                         );
                         
-                        // Send user-friendly error message for summarization failures (rate limited)
-                        await this.sendFeedErrorMessage(feedConfig, fetchOrSummarizeError, 'summary');
+                        // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors
+                        if (!feedConfig.ignoreErrors) {
+                            await this.sendFeedErrorMessage(feedConfig, fetchOrSummarizeError, 'summary');
+                        }
                         
                         // PostHog capture is now inside summarizeContent/fetchPageContent
                         item.articleSummary = 'Could not generate summary: Error during processing.';
@@ -782,19 +788,20 @@ export class FeedPollJob extends Job {
                     feedConfig.id
                 );
 
-                // Notify if threshold reached
-                if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    // Check if a notification was already sent in the last 24 hours
+                // Notify if threshold reached and failure notifications are enabled
+                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                    // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
                     );
                     const now = new Date();
+                    const quietPeriodMs = FAILURE_QUIET_PERIOD_HOURS * 60 * 60 * 1000;
                     if (
                         !lastNotified ||
-                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                        now.getTime() - new Date(lastNotified).getTime() > quietPeriodMs
                     ) {
                         Logger.info(
-                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying.`
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to send failure. Notifying and entering ${FAILURE_QUIET_PERIOD_HOURS}h quiet period.`
                         );
                         await this.notifyFeedFailure(
                             feedConfig,
@@ -805,7 +812,7 @@ export class FeedPollJob extends Job {
                         await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
                     } else {
                         Logger.info(
-                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last ${FAILURE_QUIET_PERIOD_HOURS} hours. Still in quiet period.`
                         );
                     }
                 }
@@ -846,25 +853,26 @@ export class FeedPollJob extends Job {
                     feedConfig.id
                 );
 
-                if (failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
-                    // Check if a notification was already sent in the last 24 hours
+                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                    // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
                     );
                     const now = new Date();
+                    const quietPeriodMs = FAILURE_QUIET_PERIOD_HOURS * 60 * 60 * 1000;
                     if (
                         !lastNotified ||
-                        now.getTime() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000
+                        now.getTime() - new Date(lastNotified).getTime() > quietPeriodMs
                     ) {
                         Logger.info(
-                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to post setup/broadcast error. Notifying.`
+                            `[FeedPollJob] Failure threshold (${FAILURE_NOTIFICATION_THRESHOLD}) reached for feed ${feedConfig.id} due to post setup/broadcast error. Notifying and entering ${FAILURE_QUIET_PERIOD_HOURS}h quiet period.`
                         );
                         // Assuming not a permission error if it fails before broadcast setup
                         await this.notifyFeedFailure(feedConfig, error, failureCountLast24h, false);
                         await FeedStorageService.setLastFailureNotificationNow(feedConfig.id);
                     } else {
                         Logger.info(
-                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last 24 hours. Skipping repeat notification.`
+                            `[FeedPollJob] Failure notification for feed ${feedConfig.id} already sent in the last ${FAILURE_QUIET_PERIOD_HOURS} hours. Still in quiet period.`
                         );
                     }
                 }
@@ -904,7 +912,15 @@ export class FeedPollJob extends Job {
         const reason = isPermissionError
             ? `Bot lacks permissions (e.g., Send Messages) in this channel (<#${feedConfig.channelId}>).`
             : `Failed to fetch, parse, or send feed content. Please check the URL (\`${feedConfig.url}\`) or the feed source.`;
+        
+        const effectiveFrequency = getEffectiveFrequency(feedConfig);
         const baseDescription = `The feed subscription (<${feedConfig.url}>, ID: \`${feedConfig.id}\`) has failed ${failureCount} times in the last 24 hours.`;
+        
+        const pollSuggestion = !isPermissionError 
+            ? `\n\n**💡 Suggestion:** Consider increasing the poll frequency from ${effectiveFrequency} minutes to reduce load on the feed source. Use \`/feed edit\` to adjust the frequency.`
+            : '';
+        
+        const ignoreErrorsHint = `\n\n**🔇 Note:** You can disable notifications for this feed using \`/feed edit\`:\n• **Ignore Errors**: Disables all error messages\n• **Disable Failure Notifications**: Disables only these threshold alerts`;
 
         const errorMessageBlock = error?.message ? codeBlock(truncate(error.message, 1000)) : '';
 
@@ -914,7 +930,7 @@ export class FeedPollJob extends Job {
                 `🚨 Feed Error: ${truncate(feedConfig.nickname || feedConfig.url, 100, true)}`
             )
             .setDescription(
-                `${baseDescription}\n\n**Reason:** ${reason}\n${errorMessageBlock}\n\nNo further error notifications will be sent for this feed until it recovers.\nPlease use \`/feed remove\` if the feed is permanently broken or no longer needed.`
+                `${baseDescription}\n\n**Reason:** ${reason}\n${errorMessageBlock}${pollSuggestion}${ignoreErrorsHint}\n\nNo further error notifications will be sent for this feed for ${FAILURE_QUIET_PERIOD_HOURS} hours.\nPlease use \`/feed remove\` if the feed is permanently broken or no longer needed.`
             )
             .setTimestamp();
 
@@ -1004,6 +1020,12 @@ export class FeedPollJob extends Job {
         error: any,
         errorType: 'fetch' | 'parse' | 'summary'
     ): Promise<void> {
+        // Skip if errors are being ignored for this feed
+        if (feedConfig.ignoreErrors) {
+            Logger.info(`[FeedPollJob] Skipping error message for feed ${feedConfig.id} - errors are ignored`);
+            return;
+        }
+
         // Check if we can send an error message (rate limited)
         const canSend = await FeedStorageService.canSendErrorMessage(feedConfig.id, 1); // 1 hour rate limit
         if (!canSend) {

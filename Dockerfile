@@ -44,8 +44,8 @@ COPY lang ./lang
 COPY src/drizzle.config.ts ./src/drizzle.config.ts
 COPY drizzle/migrations ./drizzle/migrations
 # Define the command to run migrations, register commands, and then start the app
-# Use our custom migration script that handles conflicts gracefully
-CMD ["sh", "-c", "bun --enable-source-maps dist/start-bot.js commands register && bun dist/start-manager.js"]
+# Run migrations first, then register commands, and finally start the app
+CMD ["sh", "-c", "bun run db:migrate && bun --enable-source-maps dist/start-bot.js commands register && bun dist/start-manager.js"]
 
 # Optional: Expose the API port if used (check config/config.json)
 # Default from template might be 3000 or similar

@@ -25,6 +25,8 @@ export interface FeedConfig {
     lastFailureNotificationAt?: Date | null;
     lastErrorMessageAt?: Date | null;
     backoffUntil?: Date | null;
+    ignoreErrors: boolean;
+    disableFailureNotifications: boolean;
 }
 
 // Interface for Category Configuration
@@ -55,6 +57,8 @@ export class FeedStorageService {
             | 'lastFailureNotificationAt'
             | 'lastErrorMessageAt'
             | 'backoffUntil'
+            | 'ignoreErrors'
+            | 'disableFailureNotifications'
         >
     ): Promise<string> {
         const id = uuidv4(); // Generate UUID in application code
@@ -71,6 +75,8 @@ export class FeedStorageService {
             lastFailureNotificationAt: null, // Initialize with null
             lastErrorMessageAt: null, // Initialize with null
             backoffUntil: null, // Initialize with null
+            ignoreErrors: false, // Initialize with false
+            disableFailureNotifications: false, // Initialize with false
         };
 
         try {
@@ -230,6 +236,8 @@ export class FeedStorageService {
             summarize?: boolean | null; // Use boolean directly
             lastArticleSummary?: string | null;
             lastCommentsSummary?: string | null;
+            ignoreErrors?: boolean | null;
+            disableFailureNotifications?: boolean | null;
             // Note: recentLinks is handled separately by updateRecentLinks
         }
     ): Promise<boolean> {
@@ -244,6 +252,8 @@ export class FeedStorageService {
             valuesToUpdate.lastArticleSummary = updates.lastArticleSummary;
         if ('lastCommentsSummary' in updates)
             valuesToUpdate.lastCommentsSummary = updates.lastCommentsSummary;
+        if ('ignoreErrors' in updates) valuesToUpdate.ignoreErrors = updates.ignoreErrors;
+        if ('disableFailureNotifications' in updates) valuesToUpdate.disableFailureNotifications = updates.disableFailureNotifications;
 
         if (Object.keys(valuesToUpdate).length === 0) {
             console.log(`[FeedStorageService] No details provided to update for feed ${feedId}`);

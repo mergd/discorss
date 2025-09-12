@@ -324,6 +324,8 @@ export class FeedCommand implements Command {
                                 addedBy: intr.user.id,
                                 frequencyOverrideMinutes: frequency,
                                 summarize: summarize,
+                                ignoreErrors: false,
+                                disableFailureNotifications: false,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);
@@ -1291,6 +1293,8 @@ ${linkLine}${snippet}`;
                                 addedBy: intr.user.id,
                                 frequencyOverrideMinutes: null, // YT feeds use default/category frequency
                                 summarize: summarize,
+                                ignoreErrors: false,
+                                disableFailureNotifications: false,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);

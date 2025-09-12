@@ -42,6 +42,8 @@ export const feeds = pgTable('feeds', {
     lastFailureNotificationAt: timestamp('last_failure_notification_at', { mode: 'date' }),
     lastErrorMessageAt: timestamp('last_error_message_at', { mode: 'date' }),
     backoffUntil: timestamp('backoff_until', { mode: 'date' }),
+    ignoreErrors: boolean('ignore_errors').notNull().default(false), // Skip error notifications for this feed
+    disableFailureNotifications: boolean('disable_failure_notifications').notNull().default(false), // Skip failure threshold notifications
 });
 
 // Table for storing individual feed failure events (for rolling 24hr checks)
