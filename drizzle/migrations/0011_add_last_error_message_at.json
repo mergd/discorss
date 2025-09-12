@@ -1,0 +1,14 @@
+{
+  "id": "0011_add_last_error_message_at",
+  "prevId": "0010_initial",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {},
+  "enums": {},
+  "schemas": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

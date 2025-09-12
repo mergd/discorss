@@ -2,7 +2,7 @@ import { ShardingManager } from 'discord.js';
 import { createRequire } from 'node:module';
 import 'reflect-metadata';
 
-import { GuildsController, ShardsController } from './controllers/index.js';
+import { GuildsController, ShardsController, StatsController } from './controllers/index.js';
 import { FeedPollJob, Job, UpdateServerCountJob } from './jobs/index.js';
 import { Api } from './models/api.js';
 import { Manager } from './models/manager.js';
@@ -77,7 +77,8 @@ async function start(): Promise<void> {
     // API
     let guildsController = new GuildsController(shardManager);
     let shardsController = new ShardsController(shardManager);
-    let api = new Api([guildsController, shardsController]);
+    let statsController = new StatsController(shardManager);
+    let api = new Api([guildsController, shardsController, statsController]);
 
     // Start
     await manager.start();

@@ -293,6 +293,10 @@ export class FeedPollJob extends Job {
             Logger.warn(
                 `[FeedPollJob] Error checking feed ${feedConfig.id} (${feedConfig.url}): ${errorMessage}`
             );
+            
+            // Send user-friendly error message to channel (rate limited)
+            await this.sendFeedErrorMessage(feedConfig, error, 'fetch');
+            
             try {
                 // Record the failure event
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
@@ -459,6 +463,10 @@ export class FeedPollJob extends Job {
                             `[FeedPollJob] Error fetching content or summarizing for ${sourceUrl}:`,
                             fetchOrSummarizeError
                         );
+                        
+                        // Send user-friendly error message for summarization failures (rate limited)
+                        await this.sendFeedErrorMessage(feedConfig, fetchOrSummarizeError, 'summary');
+                        
                         // PostHog capture is now inside summarizeContent/fetchPageContent
                         summary = 'Could not generate summary: Error during processing.'; // Set specific error
                     }
@@ -968,6 +976,71 @@ export class FeedPollJob extends Job {
                 });
             }
             // --- PostHog Error Capture --- END
+        }
+    }
+
+    /**
+     * Sends a lightweight error message to the feed channel when errors occur.
+     * Rate limited to avoid spamming users.
+     */
+    private async sendFeedErrorMessage(
+        feedConfig: FeedConfig,
+        error: any,
+        errorType: 'fetch' | 'parse' | 'summary'
+    ): Promise<void> {
+        // Check if we can send an error message (rate limited)
+        const canSend = await FeedStorageService.canSendErrorMessage(feedConfig.id, 1); // 1 hour rate limit
+        if (!canSend) {
+            Logger.info(`[FeedPollJob] Error message rate limited for feed ${feedConfig.id}`);
+            return;
+        }
+
+        const errorTypeText = {
+            fetch: 'fetching',
+            parse: 'parsing',
+            summary: 'summarizing'
+        }[errorType];
+
+        const feedName = feedConfig.nickname || feedConfig.url;
+        const errorMessage = error?.message ? ` (${error.message.substring(0, 100)}${error.message.length > 100 ? '...' : ''})` : '';
+        
+        const content = `⚠️ **Feed Error**\nThere was an issue ${errorTypeText} the feed "${feedName}"${errorMessage}.\n\n*This message is rate limited to once per hour. The feed will continue trying automatically.*`;
+
+        try {
+            const results = await this.manager.broadcastEval(
+                async (client, context) => {
+                    const { channelId, content } = context;
+                    const channel = client.channels.cache.get(channelId);
+                    if (!channel || !channel.isTextBased()) {
+                        return null;
+                    }
+                    
+                    // Type guard to ensure channel has send method
+                    if (!('send' in channel)) {
+                        return null;
+                    }
+                    
+                    try {
+                        await channel.send(content);
+                        return 'success';
+                    } catch (error: any) {
+                        return { error: error.message };
+                    }
+                },
+                { context: { channelId: feedConfig.channelId, content } }
+            );
+
+            // Check if message was sent successfully
+            const success = results.some(result => result === 'success');
+            if (success) {
+                // Update the last error message timestamp
+                await FeedStorageService.updateLastErrorMessageAt(feedConfig.id);
+                Logger.info(`[FeedPollJob] Sent error message for feed ${feedConfig.id}`);
+            } else {
+                Logger.warn(`[FeedPollJob] Failed to send error message for feed ${feedConfig.id}: ${JSON.stringify(results)}`);
+            }
+        } catch (broadcastError: any) {
+            Logger.error(`[FeedPollJob] Error sending feed error message for ${feedConfig.id}:`, broadcastError);
         }
     }
 }

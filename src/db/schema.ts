@@ -40,6 +40,7 @@ export const feeds = pgTable('feeds', {
     // Add the new column for recent links (store as JSON string)
     recentLinks: text('recent_links'),
     lastFailureNotificationAt: timestamp('last_failure_notification_at', { mode: 'date' }),
+    lastErrorMessageAt: timestamp('last_error_message_at', { mode: 'date' }),
     backoffUntil: timestamp('backoff_until', { mode: 'date' }),
 });
 

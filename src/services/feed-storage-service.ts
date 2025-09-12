@@ -23,6 +23,7 @@ export interface FeedConfig {
     lastCommentsSummary?: string | null;
     recentLinks?: string[] | null;
     lastFailureNotificationAt?: Date | null;
+    lastErrorMessageAt?: Date | null;
     backoffUntil?: Date | null;
 }
 
@@ -52,6 +53,7 @@ export class FeedStorageService {
             | 'lastCommentsSummary'
             | 'recentLinks'
             | 'lastFailureNotificationAt'
+            | 'lastErrorMessageAt'
             | 'backoffUntil'
         >
     ): Promise<string> {
@@ -67,6 +69,7 @@ export class FeedStorageService {
             // consecutiveFailures defaults to 0 in pg schema
             recentLinks: JSON.stringify([]), // Initialize with empty JSON array string
             lastFailureNotificationAt: null, // Initialize with null
+            lastErrorMessageAt: null, // Initialize with null
             backoffUntil: null, // Initialize with null
         };
 
@@ -589,6 +592,63 @@ export class FeedStorageService {
         } catch (error) {
             console.error('Error getting all category configs:', error);
             return [];
+        }
+    }
+
+    // --- Error Message Rate Limiting Methods ---
+
+    /**
+     * Gets the last error message timestamp for a feed.
+     */
+    public static async getLastErrorMessageAt(feedId: string): Promise<Date | null> {
+        try {
+            const result = await (db as any)
+                .select({ lastErrorMessageAt: feeds.lastErrorMessageAt })
+                .from(feeds)
+                .where(eq(feeds.id, feedId))
+                .limit(1);
+            return result[0]?.lastErrorMessageAt ?? null;
+        } catch (error) {
+            console.error(`Error getting last error message timestamp for feed ${feedId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Sets the last error message timestamp for a feed to now.
+     */
+    public static async updateLastErrorMessageAt(feedId: string): Promise<void> {
+        try {
+            await (db as any)
+                .update(feeds)
+                .set({ lastErrorMessageAt: new Date() })
+                .where(eq(feeds.id, feedId));
+        } catch (error) {
+            console.error(`Error updating last error message timestamp for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Checks if enough time has passed since the last error message to send another one.
+     * @param feedId The feed ID to check
+     * @param rateLimitHours Hours to wait between error messages (default: 1 hour)
+     * @returns true if we can send an error message, false if rate limited
+     */
+    public static async canSendErrorMessage(feedId: string, rateLimitHours: number = 1): Promise<boolean> {
+        try {
+            const lastErrorMessageAt = await this.getLastErrorMessageAt(feedId);
+            if (!lastErrorMessageAt) {
+                return true; // Never sent an error message, can send now
+            }
+
+            const now = new Date();
+            const timeSinceLastError = now.getTime() - lastErrorMessageAt.getTime();
+            const rateLimitMs = rateLimitHours * 60 * 60 * 1000;
+            
+            return timeSinceLastError >= rateLimitMs;
+        } catch (error) {
+            console.error(`Error checking error message rate limit for feed ${feedId}:`, error);
+            return true; // On error, allow sending to avoid suppressing important messages
         }
     }
 }
