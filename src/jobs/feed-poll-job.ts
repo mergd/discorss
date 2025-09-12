@@ -170,7 +170,7 @@ export class FeedPollJob extends Job {
     }
 
     // Check a single feed for new items (now fetches fresh config including links)
-    private async checkFeed(feedId: string): Promise<void> {
+    public async checkFeed(feedId: string): Promise<void> {
         // Fetch the latest feed config from DB, including recent links
         const feedConfig = await FeedStorageService.getFeedById(feedId);
         if (!feedConfig) {
@@ -391,7 +391,6 @@ export class FeedPollJob extends Job {
         // Prepare items with potential summaries *before* broadcastEval
         const itemsToSend = await Promise.all(
             itemsToPost.map(async item => {
-                let summary: string | null = null;
                 let articleContent: string | null = null;
                 let commentsContent: string | null = null;
                 const sourceUrl = item.link || feedConfig.url; // Use item link if available
@@ -456,7 +455,7 @@ export class FeedPollJob extends Job {
                             Logger.warn(
                                 `[FeedPollJob] No content fetched to summarize for: ${sourceUrl}`
                             );
-                            summary = 'Could not generate summary: No content fetched.'; // Set specific error
+                            item.articleSummary = 'Could not generate summary: No content fetched.';
                         }
                     } catch (fetchOrSummarizeError) {
                         Logger.error(
@@ -468,11 +467,11 @@ export class FeedPollJob extends Job {
                         await this.sendFeedErrorMessage(feedConfig, fetchOrSummarizeError, 'summary');
                         
                         // PostHog capture is now inside summarizeContent/fetchPageContent
-                        summary = 'Could not generate summary: Error during processing.'; // Set specific error
+                        item.articleSummary = 'Could not generate summary: Error during processing.';
                     }
                 }
-                // Add summary (even if it's an error message) and original item data
-                return { ...item, summary };
+                // Return the item with any added summary data
+                return item;
             })
         );
 
@@ -645,6 +644,7 @@ export class FeedPollJob extends Job {
                                         ? [messageFlags.SuppressEmbeds]
                                         : undefined,
                                 });
+                                
                                 if (item.link) {
                                     postedLinksInShard.push(item.link);
                                 }
@@ -717,6 +717,22 @@ export class FeedPollJob extends Job {
                         const errorCode = err.code;
                         if ((errorCode === 50001 || errorCode === 50013) && !firstPermissionError) {
                             firstPermissionError = err;
+                        } else if (errorCode === 'CHANNEL_NOT_FOUND_OR_INVALID_TYPE') {
+                            // Channel not found - delete the feed
+                            Logger.warn(`[FeedPollJob] Channel not found for feed ${feedConfig.id}. Deleting feed.`);
+                            try {
+                                await FeedStorageService.removeFeed(feedConfig.id, feedConfig.channelId, feedConfig.guildId);
+                                Logger.info(`[FeedPollJob] Successfully deleted feed ${feedConfig.id} due to missing channel`);
+                                
+                                // Clear the interval for this feed
+                                if (feedCheckIntervals[feedConfig.id]) {
+                                    clearInterval(feedCheckIntervals[feedConfig.id]);
+                                    delete feedCheckIntervals[feedConfig.id];
+                                }
+                                return; // Exit early since feed is deleted
+                            } catch (deleteError) {
+                                Logger.error(`[FeedPollJob] Failed to delete feed ${feedConfig.id}:`, deleteError);
+                            }
                         } else if (errorCode !== 50001 && errorCode !== 50013 && !firstOtherError) {
                             firstOtherError = err;
                         }

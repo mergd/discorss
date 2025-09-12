@@ -27,7 +27,7 @@ export class CategoryCommand implements Command {
                 type: 1, // SUB_COMMAND
                 options: [
                     { name: 'category', description: 'The name of the category.', type: 3, required: true },
-                    { name: 'minutes', description: 'Polling frequency in minutes (1-1440).', type: 4, required: true }
+                    { name: 'minutes', description: 'Polling frequency in minutes (3-1440).', type: 4, required: true }
                 ]
             },
             {
@@ -59,10 +59,10 @@ export class CategoryCommand implements Command {
                     const categoryName = intr.options.getString('category', true);
                     const frequencyMinutes = intr.options.getInteger('minutes', true);
 
-                    if (frequencyMinutes < 1 || frequencyMinutes > 1440) {
+                    if (frequencyMinutes < 3 || frequencyMinutes > 1440) {
                         await InteractionUtils.editReply(
                             intr,
-                            'Frequency must be between 1 and 1440 minutes (24 hours).'
+                            'Frequency must be between 3 and 1440 minutes (24 hours).'
                         );
                         return;
                     }

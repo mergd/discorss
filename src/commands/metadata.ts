@@ -117,9 +117,9 @@ export const ChatCommandMetadata: {
                         type: ApplicationCommandOptionType.Integer,
                         name: 'frequency',
                         description:
-                            'Polling frequency in minutes (1-1440). Overrides category frequency.',
+                            'Polling frequency in minutes (3-1440). Overrides category frequency.',
                         required: false,
-                        min_value: 1,
+                        min_value: 3,
                         max_value: 1440,
                     },
                     {
@@ -217,9 +217,9 @@ export const ChatCommandMetadata: {
                     {
                         type: ApplicationCommandOptionType.Integer,
                         name: 'frequency',
-                        description: 'Set a specific polling frequency in minutes (1-1440).',
+                        description: 'Set a specific polling frequency in minutes (3-1440).',
                         required: false,
-                        min_value: 1,
+                        min_value: 3,
                         max_value: 1440,
                     },
                     {
@@ -273,9 +273,9 @@ export const ChatCommandMetadata: {
                     {
                         type: ApplicationCommandOptionType.Integer,
                         name: 'minutes',
-                        description: 'Polling frequency in minutes (1-1440). Default: 10.',
+                        description: 'Polling frequency in minutes (3-1440). Default: 10.',
                         required: true,
-                        min_value: 1,
+                        min_value: 3,
                         max_value: 1440,
                     },
                 ],

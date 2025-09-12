@@ -7,6 +7,7 @@ import { FeedPollJob, Job, UpdateServerCountJob } from './jobs/index.js';
 import { Api } from './models/api.js';
 import { Manager } from './models/manager.js';
 import { HttpService, JobService, Logger, MasterApiService } from './services/index.js';
+import { JobRegistry } from './services/job-registry.js';
 import { env } from './utils/env.js';
 import { MathUtils, ShardUtils } from './utils/index.js';
 
@@ -66,11 +67,15 @@ async function start(): Promise<void> {
     });
 
     // Jobs
+    let feedPollJob = new FeedPollJob(shardManager);
     let jobs: Job[] = [
         Config.clustering.enabled ? undefined : new UpdateServerCountJob(shardManager, httpService),
-        new FeedPollJob(shardManager),
+        feedPollJob,
         // TODO: Add new jobs here
     ].filter(Boolean);
+
+    // Register the FeedPollJob in the global registry for access from commands
+    JobRegistry.getInstance().setFeedPollJob(feedPollJob);
 
     let manager = new Manager(shardManager, new JobService(jobs));
 
