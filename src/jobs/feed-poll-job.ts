@@ -30,7 +30,6 @@ import {
 import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
-import { formatReadTime } from '../utils/read-time.js';
 import { getRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
@@ -604,10 +603,7 @@ export class FeedPollJob extends Job {
                                 item.articleSummary &&
                                 !item.articleSummary.startsWith('Could not generate summary:')
                             ) {
-                                const readTimeText = item.articleReadTime
-                                    ? ` *${formatReadTime(item.articleReadTime)}*`
-                                    : '';
-                                contentToSend += `\n\n**Article Summary:**${readTimeText}\n${truncate(item.articleSummary, 1500, true)}`;
+                                contentToSend += `\n\n**Article Summary:**\n${truncate(item.articleSummary, 1500, true)}`;
                             }
                             // Then show Comments Summary if present and not an error
                             if (

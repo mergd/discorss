@@ -331,20 +331,43 @@ export class FeedStorageService {
     }
 
     /**
-     * Records a feed failure event with a timestamp.
+     * Records a feed failure event with a timestamp and increments consecutive failures.
      */
     public static async recordFailure(feedId: string, errorMessage?: string): Promise<void> {
         try {
+            // Insert failure record
             await (db as any).insert(feedFailures).values({
                 feedId: feedId,
                 // timestamp: new Date(), // Handled by defaultNow() in pg schema
                 errorMessage: errorMessage || null,
             });
-            // Also update the main feed's lastChecked timestamp during a failure
+
+            // Get current consecutive failures count
+            const [currentFeed] = await (db as any)
+                .select({ consecutiveFailures: feeds.consecutiveFailures })
+                .from(feeds)
+                .where(eq(feeds.id, feedId));
+
+            const newConsecutiveFailures = (currentFeed?.consecutiveFailures || 0) + 1;
+
+            // Auto-disable error notifications for very noisy feeds (>4 consecutive failures)
+            const shouldAutoDisable = newConsecutiveFailures > 4;
+
+            // Update feed with incremented consecutive failures, lastChecked, and potentially ignore_errors
+            const updateData: any = { 
+                lastChecked: new Date(),
+                consecutiveFailures: newConsecutiveFailures
+            };
+
+            if (shouldAutoDisable) {
+                updateData.ignoreErrors = true;
+            }
+
             await (db as any)
                 .update(feeds)
-                .set({ lastChecked: new Date() })
+                .set(updateData)
                 .where(eq(feeds.id, feedId));
+
         } catch (error) {
             console.error(`Error recording failure for feed ${feedId}:`, error);
         }
