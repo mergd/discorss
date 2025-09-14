@@ -253,7 +253,8 @@ export class FeedStorageService {
         if ('lastCommentsSummary' in updates)
             valuesToUpdate.lastCommentsSummary = updates.lastCommentsSummary;
         if ('ignoreErrors' in updates) valuesToUpdate.ignoreErrors = updates.ignoreErrors;
-        if ('disableFailureNotifications' in updates) valuesToUpdate.disableFailureNotifications = updates.disableFailureNotifications;
+        if ('disableFailureNotifications' in updates)
+            valuesToUpdate.disableFailureNotifications = updates.disableFailureNotifications;
 
         if (Object.keys(valuesToUpdate).length === 0) {
             console.log(`[FeedStorageService] No details provided to update for feed ${feedId}`);
@@ -354,20 +355,16 @@ export class FeedStorageService {
             const shouldAutoDisable = newConsecutiveFailures > 4;
 
             // Update feed with incremented consecutive failures, lastChecked, and potentially ignore_errors
-            const updateData: any = { 
+            const updateData: any = {
                 lastChecked: new Date(),
-                consecutiveFailures: newConsecutiveFailures
+                consecutiveFailures: newConsecutiveFailures,
             };
 
             if (shouldAutoDisable) {
                 updateData.ignoreErrors = true;
             }
 
-            await (db as any)
-                .update(feeds)
-                .set(updateData)
-                .where(eq(feeds.id, feedId));
-
+            await (db as any).update(feeds).set(updateData).where(eq(feeds.id, feedId));
         } catch (error) {
             console.error(`Error recording failure for feed ${feedId}:`, error);
         }
@@ -667,7 +664,10 @@ export class FeedStorageService {
      * @param rateLimitHours Hours to wait between error messages (default: 1 hour)
      * @returns true if we can send an error message, false if rate limited
      */
-    public static async canSendErrorMessage(feedId: string, rateLimitHours: number = 1): Promise<boolean> {
+    public static async canSendErrorMessage(
+        feedId: string,
+        rateLimitHours: number = 1
+    ): Promise<boolean> {
         try {
             const lastErrorMessageAt = await this.getLastErrorMessageAt(feedId);
             if (!lastErrorMessageAt) {
@@ -677,7 +677,7 @@ export class FeedStorageService {
             const now = new Date();
             const timeSinceLastError = now.getTime() - lastErrorMessageAt.getTime();
             const rateLimitMs = rateLimitHours * 60 * 60 * 1000;
-            
+
             return timeSinceLastError >= rateLimitMs;
         } catch (error) {
             console.error(`Error checking error message rate limit for feed ${feedId}:`, error);

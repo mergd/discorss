@@ -293,12 +293,12 @@ export class FeedPollJob extends Job {
             Logger.warn(
                 `[FeedPollJob] Error checking feed ${feedConfig.id} (${feedConfig.url}): ${errorMessage}`
             );
-            
+
             // Send user-friendly error message to channel (rate limited) - only if not ignoring errors
             if (!feedConfig.ignoreErrors) {
                 await this.sendFeedErrorMessage(feedConfig, error, 'fetch');
             }
-            
+
             try {
                 // Record the failure event
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
@@ -318,7 +318,11 @@ export class FeedPollJob extends Job {
 
                 // Notify if threshold reached and failure notifications are enabled
                 const isPermissionError = false; // Assume not permission error for fetch/parse failures
-                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                if (
+                    !feedConfig.ignoreErrors &&
+                    !feedConfig.disableFailureNotifications &&
+                    failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD
+                ) {
                     // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
@@ -465,14 +469,19 @@ export class FeedPollJob extends Job {
                             `[FeedPollJob] Error fetching content or summarizing for ${sourceUrl}:`,
                             fetchOrSummarizeError
                         );
-                        
+
                         // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors
                         if (!feedConfig.ignoreErrors) {
-                            await this.sendFeedErrorMessage(feedConfig, fetchOrSummarizeError, 'summary');
+                            await this.sendFeedErrorMessage(
+                                feedConfig,
+                                fetchOrSummarizeError,
+                                'summary'
+                            );
                         }
-                        
+
                         // PostHog capture is now inside summarizeContent/fetchPageContent
-                        item.articleSummary = 'Could not generate summary: Error during processing.';
+                        item.articleSummary =
+                            'Could not generate summary: Error during processing.';
                     }
                 }
                 // Return the item with any added summary data
@@ -646,7 +655,7 @@ export class FeedPollJob extends Job {
                                         ? [messageFlags.SuppressEmbeds]
                                         : undefined,
                                 });
-                                
+
                                 if (item.link) {
                                     postedLinksInShard.push(item.link);
                                 }
@@ -721,11 +730,19 @@ export class FeedPollJob extends Job {
                             firstPermissionError = err;
                         } else if (errorCode === 'CHANNEL_NOT_FOUND_OR_INVALID_TYPE') {
                             // Channel not found - delete the feed
-                            Logger.warn(`[FeedPollJob] Channel not found for feed ${feedConfig.id}. Deleting feed.`);
+                            Logger.warn(
+                                `[FeedPollJob] Channel not found for feed ${feedConfig.id}. Deleting feed.`
+                            );
                             try {
-                                await FeedStorageService.removeFeed(feedConfig.id, feedConfig.channelId, feedConfig.guildId);
-                                Logger.info(`[FeedPollJob] Successfully deleted feed ${feedConfig.id} due to missing channel`);
-                                
+                                await FeedStorageService.removeFeed(
+                                    feedConfig.id,
+                                    feedConfig.channelId,
+                                    feedConfig.guildId
+                                );
+                                Logger.info(
+                                    `[FeedPollJob] Successfully deleted feed ${feedConfig.id} due to missing channel`
+                                );
+
                                 // Clear the interval for this feed
                                 if (feedCheckIntervals[feedConfig.id]) {
                                     clearInterval(feedCheckIntervals[feedConfig.id]);
@@ -733,7 +750,10 @@ export class FeedPollJob extends Job {
                                 }
                                 return; // Exit early since feed is deleted
                             } catch (deleteError) {
-                                Logger.error(`[FeedPollJob] Failed to delete feed ${feedConfig.id}:`, deleteError);
+                                Logger.error(
+                                    `[FeedPollJob] Failed to delete feed ${feedConfig.id}:`,
+                                    deleteError
+                                );
                             }
                         } else if (errorCode !== 50001 && errorCode !== 50013 && !firstOtherError) {
                             firstOtherError = err;
@@ -785,7 +805,11 @@ export class FeedPollJob extends Job {
                 );
 
                 // Notify if threshold reached and failure notifications are enabled
-                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                if (
+                    !feedConfig.ignoreErrors &&
+                    !feedConfig.disableFailureNotifications &&
+                    failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD
+                ) {
                     // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
@@ -849,7 +873,11 @@ export class FeedPollJob extends Job {
                     feedConfig.id
                 );
 
-                if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications && failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD) {
+                if (
+                    !feedConfig.ignoreErrors &&
+                    !feedConfig.disableFailureNotifications &&
+                    failureCountLast24h === FAILURE_NOTIFICATION_THRESHOLD
+                ) {
                     // Check if a notification was already sent in the last quiet period
                     const lastNotified = await FeedStorageService.getLastFailureNotificationAt(
                         feedConfig.id
@@ -908,14 +936,14 @@ export class FeedPollJob extends Job {
         const reason = isPermissionError
             ? `Bot lacks permissions (e.g., Send Messages) in this channel (<#${feedConfig.channelId}>).`
             : `Failed to fetch, parse, or send feed content. Please check the URL (\`${feedConfig.url}\`) or the feed source.`;
-        
+
         const effectiveFrequency = getEffectiveFrequency(feedConfig);
         const baseDescription = `The feed subscription (<${feedConfig.url}>, ID: \`${feedConfig.id}\`) has failed ${failureCount} times in the last 24 hours.`;
-        
-        const pollSuggestion = !isPermissionError 
+
+        const pollSuggestion = !isPermissionError
             ? `\n\n**💡 Suggestion:** Consider increasing the poll frequency from ${effectiveFrequency} minutes to reduce load on the feed source. Use \`/feed edit\` to adjust the frequency.`
             : '';
-        
+
         const ignoreErrorsHint = `\n\n**🔇 Note:** You can disable notifications for this feed using \`/feed edit\`:\n• **Ignore Errors**: Disables all error messages\n• **Disable Failure Notifications**: Disables only these threshold alerts`;
 
         const errorMessageBlock = error?.message ? codeBlock(truncate(error.message, 1000)) : '';
@@ -1018,12 +1046,14 @@ export class FeedPollJob extends Job {
     ): Promise<void> {
         // Skip if errors are being ignored for this feed
         if (feedConfig.ignoreErrors) {
-            Logger.info(`[FeedPollJob] Skipping error message for feed ${feedConfig.id} - errors are ignored`);
+            Logger.info(
+                `[FeedPollJob] Skipping error message for feed ${feedConfig.id} - errors are ignored`
+            );
             return;
         }
 
         // Check if we can send an error message (rate limited)
-        const canSend = await FeedStorageService.canSendErrorMessage(feedConfig.id, 1); // 1 hour rate limit
+        const canSend = await FeedStorageService.canSendErrorMessage(feedConfig.id, 6); // 1 hour rate limit
         if (!canSend) {
             Logger.info(`[FeedPollJob] Error message rate limited for feed ${feedConfig.id}`);
             return;
@@ -1032,13 +1062,15 @@ export class FeedPollJob extends Job {
         const errorTypeText = {
             fetch: 'fetching',
             parse: 'parsing',
-            summary: 'summarizing'
+            summary: 'summarizing',
         }[errorType];
 
         const feedName = feedConfig.nickname || feedConfig.url;
-        const errorMessage = error?.message ? ` (${error.message.substring(0, 100)}${error.message.length > 100 ? '...' : ''})` : '';
-        
-        const content = `⚠️ **Feed Error**\nThere was an issue ${errorTypeText} the feed "${feedName}"${errorMessage}.\n\n*This message is rate limited to once per hour. The feed will continue trying automatically.*`;
+        const errorMessage = error?.message
+            ? ` (${error.message.substring(0, 100)}${error.message.length > 100 ? '...' : ''})`
+            : '';
+
+        const content = `⚠️ **Feed Error**\nThere was an issue ${errorTypeText} the feed "${feedName}"${errorMessage}.\n\n*This message is rate limited to once per six hours. The feed will continue trying automatically.*`;
 
         try {
             const results = await this.manager.broadcastEval(
@@ -1048,12 +1080,12 @@ export class FeedPollJob extends Job {
                     if (!channel || !channel.isTextBased()) {
                         return null;
                     }
-                    
+
                     // Type guard to ensure channel has send method
                     if (!('send' in channel)) {
                         return null;
                     }
-                    
+
                     try {
                         await channel.send(content);
                         return 'success';
@@ -1071,10 +1103,15 @@ export class FeedPollJob extends Job {
                 await FeedStorageService.updateLastErrorMessageAt(feedConfig.id);
                 Logger.info(`[FeedPollJob] Sent error message for feed ${feedConfig.id}`);
             } else {
-                Logger.warn(`[FeedPollJob] Failed to send error message for feed ${feedConfig.id}: ${JSON.stringify(results)}`);
+                Logger.warn(
+                    `[FeedPollJob] Failed to send error message for feed ${feedConfig.id}: ${JSON.stringify(results)}`
+                );
             }
         } catch (broadcastError: any) {
-            Logger.error(`[FeedPollJob] Error sending feed error message for ${feedConfig.id}:`, broadcastError);
+            Logger.error(
+                `[FeedPollJob] Error sending feed error message for ${feedConfig.id}:`,
+                broadcastError
+            );
         }
     }
 }
