@@ -396,98 +396,95 @@ export class FeedPollJob extends Job {
         let successfullyPostedLinks: string[] = [];
 
         // Prepare items with potential summaries *before* broadcastEval
-        const itemsToSend = await Promise.all(
-            itemsToPost.map(async item => {
-                let articleContent: string | null = null;
-                let commentsContent: string | null = null;
-                const sourceUrl = item.link || feedConfig.url; // Use item link if available
+        const itemsToSend: ParsedFeedItem[] = [];
+        for (const item of itemsToPost) {
+            let articleContent: string | null = null;
+            let commentsContent: string | null = null;
+            const sourceUrl = item.link || feedConfig.url; // Use item link if available
 
-                // --- Content Fetching --- (Only if summarization enabled)
-                if (feedConfig.summarize) {
-                    try {
-                        // 1. Try fetching main article content
-                        if (item.link) {
-                            // Prioritize 'content:encoded' or 'content' if present and seemingly substantial
-                            const feedItemContent = item['content:encoded'] || item.content;
-                            if (feedItemContent && feedItemContent.length > 200) {
-                                // Heuristic: content exists
-                                articleContent = feedItemContent;
-                                Logger.info(
-                                    `[FeedPollJob] Using feed item content for: ${item.link}`
-                                );
-                            } else {
-                                articleContent = await fetchPageContent(item.link);
-                            }
+            // --- Content Fetching --- (Only if summarization enabled)
+            if (feedConfig.summarize) {
+                try {
+                    // 1. Try fetching main article content
+                    if (item.link) {
+                        // Prioritize 'content:encoded' or 'content' if present and seemingly substantial
+                        const feedItemContent = item['content:encoded'] || item.content;
+                        if (feedItemContent && feedItemContent.length > 200) {
+                            // Heuristic: content exists
+                            articleContent = feedItemContent;
+                            Logger.info(`[FeedPollJob] Using feed item content for: ${item.link}`);
+                        } else {
+                            articleContent = await fetchPageContent(item.link);
                         }
+                    }
 
-                        // 2. Try fetching comments content (if comments link exists and differs)
-                        if (item.comments && item.comments !== item.link) {
-                            commentsContent = await fetchPageContent(item.comments);
-                        }
+                    // 2. Try fetching comments content (if comments link exists and differs)
+                    if (item.comments && item.comments !== item.link) {
+                        commentsContent = await fetchPageContent(item.comments);
+                    }
 
-                        // 3. Generate Summary (if we have *any* content)
-                        if (articleContent || commentsContent) {
+                    // 3. Generate Summary (if we have *any* content)
+                    if (articleContent || commentsContent) {
+                        Logger.info(
+                            `[FeedPollJob] Attempting summarization for: ${sourceUrl}` +
+                                (item.comments ? ` (incl. comments: ${item.comments})` : '')
+                        );
+                        const summaries = await summarizeContent(
+                            articleContent,
+                            commentsContent,
+                            sourceUrl
+                        );
+                        // Store summaries and read time in the item
+                        item.articleSummary = summaries.articleSummary;
+                        item.commentsSummary = summaries.commentsSummary;
+                        item.articleReadTime = summaries.articleReadTime;
+                        if (
+                            (summaries.articleSummary &&
+                                !summaries.articleSummary.startsWith(
+                                    'Could not generate summary:'
+                                )) ||
+                            (summaries.commentsSummary &&
+                                !summaries.commentsSummary.startsWith(
+                                    'Could not generate summary:'
+                                ))
+                        ) {
                             Logger.info(
-                                `[FeedPollJob] Attempting summarization for: ${sourceUrl}` +
-                                    (item.comments ? ` (incl. comments: ${item.comments})` : '')
+                                `[FeedPollJob] Successfully generated summaries for: ${sourceUrl}`
                             );
-                            const summaries = await summarizeContent(
-                                articleContent,
-                                commentsContent,
-                                sourceUrl
-                            );
-                            // Store summaries and read time in the item
-                            item.articleSummary = summaries.articleSummary;
-                            item.commentsSummary = summaries.commentsSummary;
-                            item.articleReadTime = summaries.articleReadTime;
-                            if (
-                                (summaries.articleSummary &&
-                                    !summaries.articleSummary.startsWith(
-                                        'Could not generate summary:'
-                                    )) ||
-                                (summaries.commentsSummary &&
-                                    !summaries.commentsSummary.startsWith(
-                                        'Could not generate summary:'
-                                    ))
-                            ) {
-                                Logger.info(
-                                    `[FeedPollJob] Successfully generated summaries for: ${sourceUrl}`
-                                );
-                            } else {
-                                Logger.warn(
-                                    `[FeedPollJob] Summarization failed or insufficient content for: ${sourceUrl}. Article: ${summaries.articleSummary} Comments: ${summaries.commentsSummary}`
-                                );
-                            }
                         } else {
                             Logger.warn(
-                                `[FeedPollJob] No content fetched to summarize for: ${sourceUrl}`
+                                `[FeedPollJob] Summarization failed or insufficient content for: ${sourceUrl}. Article: ${summaries.articleSummary} Comments: ${summaries.commentsSummary}`
                             );
-                            item.articleSummary = 'Could not generate summary: No content fetched.';
                         }
-                    } catch (fetchOrSummarizeError) {
-                        Logger.error(
-                            `[FeedPollJob] Error fetching content or summarizing for ${sourceUrl}:`,
-                            fetchOrSummarizeError
+                    } else {
+                        Logger.warn(
+                            `[FeedPollJob] No content fetched to summarize for: ${sourceUrl}`
                         );
-
-                        // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors
-                        if (!feedConfig.ignoreErrors) {
-                            await this.sendFeedErrorMessage(
-                                feedConfig,
-                                fetchOrSummarizeError,
-                                'summary'
-                            );
-                        }
-
-                        // PostHog capture is now inside summarizeContent/fetchPageContent
-                        item.articleSummary =
-                            'Could not generate summary: Error during processing.';
+                        item.articleSummary = 'Could not generate summary: No content fetched.';
                     }
+                } catch (fetchOrSummarizeError) {
+                    Logger.error(
+                        `[FeedPollJob] Error fetching content or summarizing for ${sourceUrl}:`,
+                        fetchOrSummarizeError
+                    );
+
+                    // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors
+                    if (!feedConfig.ignoreErrors) {
+                        await this.sendFeedErrorMessage(
+                            feedConfig,
+                            fetchOrSummarizeError,
+                            'summary'
+                        );
+                    }
+
+                    // PostHog capture is now inside summarizeContent/fetchPageContent
+                    item.articleSummary =
+                        'Could not generate summary: Error during processing.';
                 }
-                // Return the item with any added summary data
-                return item;
-            })
-        );
+            }
+
+            itemsToSend.push(item);
+        }
 
         // --- Message Sending (broadcastEval) ---
         try {
