@@ -50,9 +50,10 @@ interface ParsedFeedItem {
     articleReadTime?: number;
 }
 
-const feedCheckIntervals: { [feedId: string]: NodeJS.Timeout } = {};
+// Replace individual intervals with batch processing
 const categoryFrequencies: Map<string, number> = new Map();
-const feedLastChecked: { [feedId: string]: number } = {}; // Track last check times
+const feedQueue: Map<string, { feed: FeedConfig; nextCheck: number }> = new Map();
+let batchProcessorInterval: NodeJS.Timeout | null = null;
 
 // Store enum values for context passing
 const GuildTextChannelTypeValue = ChannelType.GuildText; // 0
@@ -83,10 +84,11 @@ function getEffectiveFrequency(feed: FeedConfig): number {
 
 export class FeedPollJob extends Job {
     public name = 'Feed Poll Job';
-    public schedule: string = '* * * * *'; // Placeholder, we use dynamic intervals
+    public schedule: string = '0 */10 * * * *'; // Run every 10 minutes to reload feeds, not every minute!
     public log: boolean = false; // Disable default interval logging, we log activity manually
 
     private manager: ShardingManager;
+    private isInitialized: boolean = false;
 
     constructor(manager: ShardingManager) {
         super();
@@ -94,15 +96,32 @@ export class FeedPollJob extends Job {
     }
 
     public async run(): Promise<void> {
-        // This run method is called by the scheduler (if configured), but we use dynamic intervals
-        // So, this method primarily ensures the polling starts/restarts if the bot restarts.
-        Logger.info('[FeedPollJob] Initializing dynamic polling intervals...');
+        // Only run full initialization once, then just reload feeds periodically
+        if (!this.isInitialized) {
+            Logger.info('[FeedPollJob] Initial startup - loading and scheduling all feeds...');
+            this.isInitialized = true;
+        } else {
+            Logger.info('[FeedPollJob] Periodic reload - checking for new/updated feeds...');
+        }
+
         this.loadAndScheduleFeeds().catch(error => {
-            Logger.error('[FeedPollJob] Error during initial load/schedule:', error);
+            Logger.error('[FeedPollJob] Error during load/schedule:', error);
         });
     }
 
-    // Load all feeds and set/update their individual polling intervals
+    // Clean up batch processor when job stops
+    public async stop(): Promise<void> {
+        Logger.info('[FeedPollJob] Stopping batch processor...');
+        if (batchProcessorInterval) {
+            clearInterval(batchProcessorInterval);
+            batchProcessorInterval = null;
+        }
+        feedQueue.clear();
+        categoryFrequencies.clear();
+        Logger.info('[FeedPollJob] Batch processor stopped and queues cleared.');
+    }
+
+    // Load all feeds and add them to batch processing queue
     private async loadAndScheduleFeeds(): Promise<void> {
         // Load all category frequencies first
         const allCategoryConfigs: CategoryConfig[] =
@@ -118,55 +137,133 @@ export class FeedPollJob extends Job {
             `[FeedPollJob] Loaded ${categoryFrequencies.size} custom category frequencies.`
         );
 
-        // Load all feeds (now includes recentLinks)
+        // Load all feeds
         const allFeeds: FeedConfig[] = await FeedStorageService.getAllFeeds();
         Logger.info(`[FeedPollJob] Processing ${allFeeds.length} feeds.`);
 
-        // Clear existing intervals that might be for removed feeds
+        // Update feed queue with current feeds
         const currentFeedIds = new Set(allFeeds.map(f => f.id));
-        for (const feedId in feedCheckIntervals) {
+
+        // Remove feeds that no longer exist
+        for (const [feedId] of feedQueue) {
             if (!currentFeedIds.has(feedId)) {
-                clearInterval(feedCheckIntervals[feedId]);
-                delete feedCheckIntervals[feedId];
-                // --- REMOVED recentLinksCache cleanup ---
-                Logger.info(`[FeedPollJob] Cleared interval for removed feed ID: ${feedId}`);
+                feedQueue.delete(feedId);
+                Logger.info(`[FeedPollJob] Removed feed ${feedId} from queue`);
             }
         }
 
-        // Schedule/reschedule feeds
+        // Add/update feeds in queue
+        const now = Date.now();
         for (const feed of allFeeds) {
             const frequencyMinutes = getEffectiveFrequency(feed);
             const intervalMillis = frequencyMinutes * 60 * 1000;
 
-            // Clear existing interval for this feed if it exists (frequency might have changed)
-            if (feedCheckIntervals[feed.id]) {
-                clearInterval(feedCheckIntervals[feed.id]);
+            // Schedule immediate check for new feeds, or update existing
+            const existing = feedQueue.get(feed.id);
+            const nextCheck = existing ? existing.nextCheck : now; // Immediate for new feeds
+
+            feedQueue.set(feed.id, {
+                feed,
+                nextCheck,
+            });
+        }
+
+        // Start batch processor if not already running
+        if (!batchProcessorInterval) {
+            this.startBatchProcessor();
+        }
+
+        Logger.info(`[FeedPollJob] Added ${allFeeds.length} feeds to batch queue.`);
+    }
+
+    // Batch processor that checks feeds when they're due
+    private startBatchProcessor(): void {
+        const BATCH_CHECK_INTERVAL = 30000; // Check every 30 seconds
+        const MAX_CONCURRENT_FEEDS = 5; // Limit concurrent feed checks
+        let cycleCount = 0;
+
+        batchProcessorInterval = setInterval(async () => {
+            const now = Date.now();
+            const feedsToCheck: string[] = [];
+
+            // Find feeds that are due for checking
+            for (const [feedId, queueItem] of feedQueue) {
+                if (queueItem.nextCheck <= now) {
+                    feedsToCheck.push(feedId);
+                }
             }
 
-            // Schedule the check immediately and then at the determined interval
-            this.checkFeed(feed.id).catch(error => {
-                // Pass ID instead of full config initially
-                Logger.error(
-                    `[FeedPollJob] Error during initial check for feed ${feed.id} (${feed.url}):`,
-                    error
+            if (feedsToCheck.length === 0) {
+                return; // Nothing to check
+            }
+
+            Logger.info(`[FeedPollJob] Batch checking ${feedsToCheck.length} feeds`);
+
+            // Process feeds in batches to avoid overwhelming the system
+            const batches = [];
+            for (let i = 0; i < feedsToCheck.length; i += MAX_CONCURRENT_FEEDS) {
+                batches.push(feedsToCheck.slice(i, i + MAX_CONCURRENT_FEEDS));
+            }
+
+            for (const batch of batches) {
+                const promises = batch.map(feedId => this.processFeedInQueue(feedId));
+                await Promise.allSettled(promises);
+
+                // Small delay between batches to prevent overwhelming
+                if (batches.length > 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+
+            // Periodic memory monitoring and garbage collection
+            cycleCount++;
+            if (cycleCount % 10 === 0) {
+                // Every 10 cycles (5 minutes)
+                const memUsage = process.memoryUsage();
+                Logger.info(
+                    `[FeedPollJob] Memory usage - RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
                 );
+
+                // Force garbage collection if available
+                if (global.gc) {
+                    global.gc();
+                    Logger.info('[FeedPollJob] Forced garbage collection');
+                }
+
+                // Log feed queue stats
+                Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
+            }
+        }, BATCH_CHECK_INTERVAL);
+
+        Logger.info('[FeedPollJob] Batch processor started');
+    }
+
+    // Process a single feed and update its next check time
+    private async processFeedInQueue(feedId: string): Promise<void> {
+        const queueItem = feedQueue.get(feedId);
+        if (!queueItem) return;
+
+        try {
+            await this.checkFeed(feedId);
+
+            // Schedule next check
+            const frequencyMinutes = getEffectiveFrequency(queueItem.feed);
+            const nextCheck = Date.now() + frequencyMinutes * 60 * 1000;
+
+            feedQueue.set(feedId, {
+                feed: queueItem.feed,
+                nextCheck,
             });
+        } catch (error) {
+            Logger.error(`[FeedPollJob] Error processing feed ${feedId} in batch:`, error);
 
-            feedCheckIntervals[feed.id] = setInterval(() => {
-                this.checkFeed(feed.id).catch(error => {
-                    // Pass ID instead of full config
-                    Logger.error(
-                        `[FeedPollJob] Error during scheduled check for feed ${feed.id} (${feed.url}):`,
-                        error
-                    );
-                });
-            }, intervalMillis);
-
-            // Logger.info(`[FeedPollJob] Scheduled feed ${feed.id} (${feed.nickname || feed.url}) every ${frequencyMinutes} minutes.`);
+            // Reschedule with backoff on error
+            const nextCheck = Date.now() + 5 * 60 * 1000; // 5 minutes
+            feedQueue.set(feedId, {
+                feed: queueItem.feed,
+                nextCheck,
+            });
         }
-        Logger.info(
-            `[FeedPollJob] Finished scheduling ${Object.keys(feedCheckIntervals).length} feeds.`
-        );
     }
 
     // Check a single feed for new items (now fetches fresh config including links)
@@ -175,14 +272,9 @@ export class FeedPollJob extends Job {
         const feedConfig = await FeedStorageService.getFeedById(feedId);
         if (!feedConfig) {
             Logger.warn(`[FeedPollJob] Feed config not found for ID ${feedId}. Skipping check.`);
-            // Consider clearing interval if feed is permanently gone
-            if (feedCheckIntervals[feedId]) {
-                clearInterval(feedCheckIntervals[feedId]);
-                delete feedCheckIntervals[feedId];
-                Logger.info(
-                    `[FeedPollJob] Cleared interval for potentially deleted feed ID: ${feedId}`
-                );
-            }
+            // Remove from queue if feed is permanently gone
+            feedQueue.delete(feedId);
+            Logger.info(`[FeedPollJob] Removed potentially deleted feed ID from queue: ${feedId}`);
             return;
         }
 
@@ -699,7 +791,19 @@ export class FeedPollJob extends Job {
                 {
                     context: {
                         channelId: feedConfig.channelId,
-                        itemsToSendWithSummaries: itemsToSend, // Pass items including summaries
+                        // Reduce payload size by only sending essential data
+                        itemsToSendWithSummaries: itemsToSend.map(item => ({
+                            title: item.title,
+                            link: item.link,
+                            pubDate: item.pubDate,
+                            isoDate: item.isoDate,
+                            creator: item.creator,
+                            author: item.author,
+                            comments: item.comments,
+                            articleSummary: item.articleSummary,
+                            commentsSummary: item.commentsSummary,
+                            articleReadTime: item.articleReadTime,
+                        })),
                         guildTextChannelType: GuildTextChannelTypeValue,
                         guildAnnouncementChannelType: GuildAnnouncementChannelTypeValue,
                         feedId: feedConfig.id,
@@ -743,11 +847,8 @@ export class FeedPollJob extends Job {
                                     `[FeedPollJob] Successfully deleted feed ${feedConfig.id} due to missing channel`
                                 );
 
-                                // Clear the interval for this feed
-                                if (feedCheckIntervals[feedConfig.id]) {
-                                    clearInterval(feedCheckIntervals[feedConfig.id]);
-                                    delete feedCheckIntervals[feedConfig.id];
-                                }
+                                // Remove the feed from queue
+                                feedQueue.delete(feedConfig.id);
                                 return; // Exit early since feed is deleted
                             } catch (deleteError) {
                                 Logger.error(

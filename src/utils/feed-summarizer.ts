@@ -1,7 +1,6 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateText } from 'ai';
 import fetch from 'node-fetch';
-import { JSDOM } from 'jsdom';
 import { MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js'; // Added Logger
 import { posthog } from './analytics.js'; // Import posthog
@@ -55,52 +54,82 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             return null; // Skip non-html pages
         }
 
-        const html = await res.text();
+        // Limit HTML content to prevent memory issues
+        const fullText = await res.text();
+        const maxHtmlLength = 50000; // 50KB max
+        const html =
+            fullText.length > maxHtmlLength ? fullText.substring(0, maxHtmlLength) : fullText;
+
         Logger.info(
-            `[FeedSummarizer] Successfully fetched HTML for URL: ${url}. Length: ${html.length}`
+            `[FeedSummarizer] Fetched HTML for URL: ${url}. Length: ${html.length} (truncated: ${html.length >= 50000})`
         );
 
-        // Parse HTML with jsdom for content extraction (no script execution)
-        const dom = new JSDOM(html, {
-            url: url,
-            runScripts: 'outside-only', // Much safer and lighter than 'dangerously'
-            resources: 'usable',
-            pretendToBeVisual: false, // Reduce memory footprint
-        });
+        // Use regex-based approach instead of JSDOM for better memory efficiency
+        // This avoids creating heavy DOM objects and potential memory leaks
+        let cleanedText: string;
 
-        const document = dom.window.document;
+        try {
+            // Extract content between body tags if available
+            const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+            let textContent = bodyMatch ? bodyMatch[1] : html;
 
-        // Remove script and style elements entirely
-        const scriptsAndStyles = document.querySelectorAll('script, style, noscript');
-        scriptsAndStyles.forEach(el => el.remove());
+            // Remove script and style blocks first
+            textContent = textContent
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+                .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, ' ');
 
-        // Try to get main content area first, fallback to body
-        let contentElement = document.querySelector(
-            'main, article, [role="main"], .content, #content, .post, .article'
-        );
-        if (!contentElement) {
-            contentElement = document.body;
+            // Try to extract main content areas
+            const contentPatterns = [
+                /<main[^>]*>([\s\S]*?)<\/main>/i,
+                /<article[^>]*>([\s\S]*?)<\/article>/i,
+                /role=["']main["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
+                /class=["'][^"']*content[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
+                /id=["']content["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
+            ];
+
+            let extractedContent = null;
+            for (const pattern of contentPatterns) {
+                const match = textContent.match(pattern);
+                if (match && match[1] && match[1].length > 500) {
+                    extractedContent = match[1];
+                    break;
+                }
+            }
+
+            // Use extracted content or fall back to full text
+            const contentToClean = extractedContent || textContent;
+
+            // Remove all HTML tags and clean up
+            cleanedText = contentToClean
+                .replace(/<[^>]+>/g, ' ') // Remove all HTML tags
+                .replace(/&[a-zA-Z0-9#]+;/g, ' ') // Remove HTML entities
+                .replace(/\s+/g, ' ') // Normalize whitespace
+                .trim();
+        } catch (regexError) {
+            Logger.warn(
+                `[FeedSummarizer] Regex parsing failed for ${url}, falling back to simple cleanup`
+            );
+            cleanedText = html
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
         }
-
-        if (!contentElement) {
-            Logger.warn(`[FeedSummarizer] No body element found for URL: ${url}`);
-            dom.window.close();
-            return null;
-        }
-
-        // Extract text content and clean it up
-        const textContent = contentElement.textContent || '';
-        const cleanedText = textContent
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-
-        // Clean up jsdom resources
-        dom.window.close();
 
         Logger.info(
             `[FeedSummarizer] Extracted content for URL ${url}. Length: ${cleanedText.length}`
         );
-        return cleanedText.substring(0, 15000); // Limit content length
+
+        // More aggressive content limiting to reduce memory usage
+        const maxLength = Math.min(8000, cleanedText.length); // Reduced from 15000 to 8000
+        const result = cleanedText.substring(0, maxLength);
+
+        // Clear variables to help GC
+        cleanedText = '';
+
+        return result;
     } catch (error: any) {
         Logger.error(
             `[FeedSummarizer] Error fetching or processing page content from ${url}:`,
