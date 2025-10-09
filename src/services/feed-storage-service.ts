@@ -29,6 +29,23 @@ export interface FeedConfig {
     disableFailureNotifications: boolean;
 }
 
+// Lightweight interface for feed polling - excludes large text fields to save memory
+export interface FeedPollConfig {
+    id: string;
+    url: string;
+    channelId: string;
+    guildId: string;
+    nickname?: string | null;
+    category?: string | null;
+    lastItemGuid?: string | null;
+    frequencyOverrideMinutes?: number | null;
+    summarize: boolean;
+    recentLinks?: string[] | null;
+    backoffUntil?: Date | null;
+    ignoreErrors: boolean;
+    disableFailureNotifications: boolean;
+}
+
 // Interface for Category Configuration
 export interface CategoryConfig {
     guildId: string;
@@ -192,6 +209,41 @@ export class FeedStorageService {
             }));
         } catch (error) {
             console.error('Error getting all feeds:', error);
+            return []; // Return empty array on error
+        }
+    }
+
+    /**
+     * Retrieves all feeds optimized for polling - excludes large text fields to reduce memory usage.
+     * This saves significant memory when storing feeds in the polling queue.
+     */
+    public static async getAllFeedsForPolling(): Promise<FeedPollConfig[]> {
+        try {
+            const results = await (db as any)
+                .select({
+                    id: feeds.id,
+                    url: feeds.url,
+                    channelId: feeds.channelId,
+                    guildId: feeds.guildId,
+                    nickname: feeds.nickname,
+                    category: feeds.category,
+                    lastItemGuid: feeds.lastItemGuid,
+                    frequencyOverrideMinutes: feeds.frequencyOverrideMinutes,
+                    summarize: feeds.summarize,
+                    recentLinks: feeds.recentLinks,
+                    backoffUntil: feeds.backoffUntil,
+                    ignoreErrors: feeds.ignoreErrors,
+                    disableFailureNotifications: feeds.disableFailureNotifications,
+                })
+                .from(feeds)
+                .orderBy(asc(feeds.guildId), asc(feeds.channelId), asc(feeds.createdAt));
+            // Parse recentLinks for each feed
+            return results.map(feed => ({
+                ...feed,
+                recentLinks: this.parseRecentLinks(feed.recentLinks),
+            }));
+        } catch (error) {
+            console.error('Error getting all feeds for polling:', error);
             return []; // Return empty array on error
         }
     }

@@ -26,6 +26,7 @@ import {
     CategoryConfig,
     FeedConfig,
     FeedStorageService,
+    FeedPollConfig,
 } from '../services/feed-storage-service.js';
 import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
@@ -52,7 +53,8 @@ interface ParsedFeedItem {
 
 // Replace individual intervals with batch processing
 const categoryFrequencies: Map<string, number> = new Map();
-const feedQueue: Map<string, { feed: FeedConfig; nextCheck: number }> = new Map();
+// Use lightweight FeedPollConfig to reduce memory usage - excludes large summary fields
+const feedQueue: Map<string, { feed: FeedPollConfig; nextCheck: number }> = new Map();
 let batchProcessorInterval: NodeJS.Timeout | null = null;
 
 // Store enum values for context passing
@@ -60,7 +62,7 @@ const GuildTextChannelTypeValue = ChannelType.GuildText; // 0
 const GuildAnnouncementChannelTypeValue = ChannelType.GuildAnnouncement; // 5
 
 // Helper function to get effective frequency
-function getEffectiveFrequency(feed: FeedConfig): number {
+function getEffectiveFrequency(feed: FeedPollConfig): number {
     // 1. Use feed-specific override if set
     if (feed.frequencyOverrideMinutes != null && feed.frequencyOverrideMinutes > 0) {
         return Math.max(
@@ -137,8 +139,8 @@ export class FeedPollJob extends Job {
             `[FeedPollJob] Loaded ${categoryFrequencies.size} custom category frequencies.`
         );
 
-        // Load all feeds
-        const allFeeds: FeedConfig[] = await FeedStorageService.getAllFeeds();
+        // Load all feeds using lightweight polling config to save memory
+        const allFeeds: FeedPollConfig[] = await FeedStorageService.getAllFeedsForPolling();
         Logger.info(`[FeedPollJob] Processing ${allFeeds.length} feeds.`);
 
         // Update feed queue with current feeds

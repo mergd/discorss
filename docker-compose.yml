@@ -1,9 +1,9 @@
-version: '3.8'
+version: "3.8"
 
 services:
     db:
         image: postgres:16
-        profiles: ['localdb']
+        profiles: ["localdb"]
         environment:
             POSTGRES_DB: discorss
             POSTGRES_USER: discorss
@@ -11,12 +11,12 @@ services:
         volumes:
             - pgdata:/var/lib/postgresql/data
         healthcheck:
-            test: ['CMD', 'pg_isready', '-U', 'discorss']
+            test: ["CMD", "pg_isready", "-U", "discorss"]
             interval: 5s
             timeout: 5s
             retries: 5
         ports:
-            - '5432:5432'
+            - "5432:5432"
 
     bot:
         build: .
@@ -31,6 +31,13 @@ services:
         depends_on:
             db:
                 condition: service_healthy
+        # Memory limits to prevent excessive usage and control costs
+        deploy:
+            resources:
+                limits:
+                    memory: 1G # Adjust based on your feed count (1G for <500 feeds, 2G for 500-1500 feeds)
+                reservations:
+                    memory: 256M
         # Uncomment if you want to expose a port for a web UI/API
         # ports:
         #   - "3000:3000"
