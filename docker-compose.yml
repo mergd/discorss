@@ -21,6 +21,7 @@ services:
     bot:
         build: .
         env_file: .env
+        restart: unless-stopped
         environment:
             # Use DATABASE_URL from .env if set, otherwise default to local db
             DATABASE_URL: ${DATABASE_URL:-postgres://discorss:discorss@db:5432/discorss}
@@ -31,13 +32,13 @@ services:
         depends_on:
             db:
                 condition: service_healthy
-        # Memory limits to prevent excessive usage and control costs
+        # Tighter memory limits to force OOM and restart on memory leak (temporary mitigation)
         deploy:
             resources:
                 limits:
-                    memory: 1G # Adjust based on your feed count (1G for <500 feeds, 2G for 500-1500 feeds)
+                    memory: 512M # Lower limit to trigger OOM faster
                 reservations:
-                    memory: 256M
+                    memory: 128M
         # Uncomment if you want to expose a port for a web UI/API
         # ports:
         #   - "3000:3000"

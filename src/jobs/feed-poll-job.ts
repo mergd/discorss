@@ -572,8 +572,7 @@ export class FeedPollJob extends Job {
                     }
 
                     // PostHog capture is now inside summarizeContent/fetchPageContent
-                    item.articleSummary =
-                        'Could not generate summary: Error during processing.';
+                    item.articleSummary = 'Could not generate summary: Error during processing.';
                 }
             }
 
