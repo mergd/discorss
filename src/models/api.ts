@@ -12,6 +12,7 @@ let Logs = require('../../lang/logs.json');
 
 export class Api {
     private app: Express;
+    private server: any = null;
 
     constructor(public controllers: Controller[]) {
         this.app = express();
@@ -22,8 +23,25 @@ export class Api {
 
     public async start(): Promise<void> {
         let listen = util.promisify(this.app.listen.bind(this.app));
-        await listen(Config.api.port);
+        this.server = await listen(Config.api.port);
         Logger.info(Logs.info.apiStarted.replaceAll('{PORT}', Config.api.port));
+    }
+
+    public async stop(): Promise<void> {
+        Logger.info('[Api] Stopping API server...');
+        if (this.server) {
+            return new Promise<void>((resolve, reject) => {
+                this.server.close((err?: Error) => {
+                    if (err) {
+                        Logger.error('[Api] Error stopping API server:', err);
+                        reject(err);
+                    } else {
+                        Logger.info('[Api] API server stopped.');
+                        resolve();
+                    }
+                });
+            });
+        }
     }
 
     private setupControllers(): void {

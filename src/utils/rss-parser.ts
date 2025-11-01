@@ -21,3 +21,7 @@ export function getRSSParser(): Parser<any, any> {
     }
     return sharedParser;
 }
+
+export function resetRSSParser(): void {
+    sharedParser = null;
+}

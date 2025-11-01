@@ -91,6 +91,55 @@ async function start(): Promise<void> {
     if (Config.clustering.enabled) {
         await masterApiService.ready();
     }
+
+    // Store instances for graceful shutdown
+    let managerInstance = manager;
+    let apiInstance = api;
+    let masterApiServiceInstance = masterApiService;
+
+    // Graceful shutdown handlers
+    const shutdown = async (signal: string) => {
+        Logger.info(`[StartManager] Received ${signal}, starting graceful shutdown...`);
+        try {
+            if (Config.clustering.enabled && masterApiServiceInstance) {
+                try {
+                    await masterApiServiceInstance.unregister();
+                } catch (error) {
+                    Logger.error('[StartManager] Error unregistering from master API:', error);
+                }
+            }
+
+            if (apiInstance) {
+                try {
+                    await apiInstance.stop();
+                } catch (error) {
+                    Logger.error('[StartManager] Error stopping API:', error);
+                }
+            }
+
+            if (managerInstance) {
+                await managerInstance.stop();
+            }
+
+            // Import and close database connection
+            const { closeDb } = await import('./db/index.js');
+            await closeDb();
+
+            // Reset RSS parser
+            const { resetRSSParser } = await import('./utils/rss-parser.js');
+            resetRSSParser();
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            Logger.info('[StartManager] Graceful shutdown complete.');
+            process.exit(0);
+        } catch (error) {
+            Logger.error('[StartManager] Error during shutdown:', error);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 process.on('unhandledRejection', (reason, _promise) => {

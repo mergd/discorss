@@ -32,6 +32,12 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             Logger.warn(
                 `[FeedSummarizer] Failed to fetch page content from ${url}. Status: ${res.status}`
             );
+            // Ensure response body is consumed to prevent memory leaks
+            try {
+                await res.text();
+            } catch {
+                // Ignore errors when consuming failed response
+            }
             // Capture failure in PostHog
             posthog?.capture({
                 distinctId: 'system_summarizer',
@@ -51,6 +57,12 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             Logger.warn(
                 `[FeedSummarizer] Skipping non-HTML content type (${contentType}) for URL: ${url}`
             );
+            // Ensure response body is consumed to prevent memory leaks
+            try {
+                await res.text();
+            } catch {
+                // Ignore errors when consuming response
+            }
             return null; // Skip non-html pages
         }
 

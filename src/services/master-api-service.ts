@@ -62,4 +62,24 @@ export class MasterApiService {
             throw res;
         }
     }
+
+    public async unregister(): Promise<void> {
+        if (!this.clusterId) {
+            return;
+        }
+
+        try {
+            let res = await this.httpService.delete(
+                new URL(`/clusters/${this.clusterId}`, Config.clustering.masterApi.url),
+                Config.clustering.masterApi.token
+            );
+
+            if (!res.ok) {
+                throw res;
+            }
+        } catch (error) {
+            // Log but don't throw - best effort cleanup
+            console.error('[MasterApiService] Error unregistering cluster:', error);
+        }
+    }
 }

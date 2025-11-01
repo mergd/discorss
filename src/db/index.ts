@@ -21,5 +21,9 @@ const dbInstance = drizzlePg(pgClient, { schema, logger: true });
 
 export const db = dbInstance;
 
+export async function closeDb(): Promise<void> {
+    await pgClient.end();
+}
+
 // Export schema for easy access
 export * from './schema.js';

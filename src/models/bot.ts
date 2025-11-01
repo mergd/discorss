@@ -200,4 +200,21 @@ export class Bot {
             Logger.error(Logs.error.apiRateLimit, rateLimitData);
         }
     }
+
+    public async stop(): Promise<void> {
+        Logger.info('[Bot] Stopping bot and cleaning up...');
+        
+        this.ready = false;
+        
+        if (this.jobService) {
+            await this.jobService.stop();
+        }
+        
+        if (this.client) {
+            this.client.removeAllListeners();
+            this.client.destroy();
+        }
+        
+        Logger.info('[Bot] Bot stopped and cleaned up.');
+    }
 }

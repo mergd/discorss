@@ -50,4 +50,18 @@ export class Manager {
     private onShardCreate(shard: Shard): void {
         Logger.info(Logs.info.managerLaunchedShard.replaceAll('{SHARD_ID}', shard.id.toString()));
     }
+
+    public async stop(): Promise<void> {
+        Logger.info('[Manager] Stopping manager and cleaning up...');
+        
+        if (this.jobService) {
+            await this.jobService.stop();
+        }
+        
+        if (this.shardManager) {
+            this.shardManager.removeAllListeners();
+        }
+        
+        Logger.info('[Manager] Manager stopped and cleaned up.');
+    }
 }

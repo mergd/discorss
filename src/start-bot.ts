@@ -131,6 +131,31 @@ async function start(): Promise<void> {
     }
 
     await bot.start();
+
+    // Store bot instance for graceful shutdown
+    let botInstance = bot;
+
+    // Graceful shutdown handlers
+    const shutdown = async (signal: string) => {
+        Logger.info(`[StartBot] Received ${signal}, starting graceful shutdown...`);
+        try {
+            await botInstance.stop();
+            
+            // Reset RSS parser if used
+            const { resetRSSParser } = await import('./utils/rss-parser.js');
+            resetRSSParser();
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            Logger.info('[StartBot] Graceful shutdown complete.');
+            process.exit(0);
+        } catch (error) {
+            Logger.error('[StartBot] Error during shutdown:', error);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 process.on('unhandledRejection', (reason, _promise) => {
