@@ -6,6 +6,9 @@ import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 import { env } from '../../utils/env.js';
 
+const GITHUB_REPO_URL = 'https://github.com/mergd/discorss';
+const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues/new`;
+
 export class FeedbackCommand implements Command {
     public names = ['feedback'];
     public deferType = CommandDeferType.HIDDEN;
@@ -29,6 +32,10 @@ export class FeedbackCommand implements Command {
             }
         }
 
-        await InteractionUtils.send(intr, 'Thank you for your feedback!', true);
+        await InteractionUtils.send(
+            intr,
+            `Thank you for your feedback! For bug reports and feature requests, please consider opening an issue on GitHub:\n${GITHUB_ISSUES_URL}`,
+            true
+        );
     }
 }

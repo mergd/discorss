@@ -11,6 +11,7 @@ import {
     CategoryCommand,
     FeedCommand,
     FeedbackCommand,
+    ReleaseNotesCommand,
 } from './commands/chat/index.js';
 import {
     ChatCommandMetadata,
@@ -73,6 +74,7 @@ async function start(): Promise<void> {
         new HelpCommand(),
         new InfoCommand(),
         new FeedbackCommand(),
+        new ReleaseNotesCommand(),
         new FeedCommand(),
         new CategoryCommand(),
     ];

@@ -69,6 +69,13 @@ export const ChatCommandMetadata: {
             },
         ],
     },
+    RELEASENOTES: {
+        type: ApplicationCommandType.ChatInput,
+        name: 'releasenotes',
+        description: 'View the latest release notes',
+        dm_permission: true,
+        default_member_permissions: undefined,
+    },
     TEST: {
         type: ApplicationCommandType.ChatInput,
         name: 'test',

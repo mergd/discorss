@@ -1,0 +1,18 @@
+[
+    {
+        "version": "1.0.0",
+        "date": "2025-01-01",
+        "title": "Initial Release",
+        "features": [
+            "RSS feed polling and Discord integration",
+            "AI-powered content summarization",
+            "Archive.is integration for paywalled content",
+            "Slash command interface",
+            "Multi-shard architecture with cluster management"
+        ],
+        "improvements": [],
+        "bugfixes": [],
+        "url": "https://github.com/mergd/discorss"
+    }
+]
+
