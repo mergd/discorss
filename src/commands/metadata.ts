@@ -141,6 +141,12 @@ export const ChatCommandMetadata: {
                         description: 'Enable archive.is links for all links (default: only for paywalled sites)',
                         required: false,
                     },
+                    {
+                        type: ApplicationCommandOptionType.String,
+                        name: 'language',
+                        description: 'Language code for summaries (e.g., en, es, fr, de). Overrides server language.',
+                        required: false,
+                    },
                 ],
             },
             {
@@ -247,6 +253,12 @@ export const ChatCommandMetadata: {
                         description: 'Enable archive.is links for all links (default: only for paywalled sites)',
                         required: false,
                     },
+                    {
+                        type: ApplicationCommandOptionType.String,
+                        name: 'language',
+                        description: 'Language code for summaries (e.g., en, es, fr, de). Overrides server language.',
+                        required: false,
+                    },
                 ],
             },
             {
@@ -266,6 +278,19 @@ export const ChatCommandMetadata: {
                         description: 'Channel the feed is in (defaults to current channel).',
                         required: false,
                         channel_types: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+                    },
+                ],
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'setlanguage',
+                description: 'Set the default language for all feed summaries in this server.',
+                options: [
+                    {
+                        type: ApplicationCommandOptionType.String,
+                        name: 'language',
+                        description: 'Language code (e.g., en, es, fr, de). Leave empty to reset to default.',
+                        required: false,
                     },
                 ],
             },

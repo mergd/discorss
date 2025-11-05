@@ -1,16 +1,19 @@
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { generateText } from 'ai';
 import fetch from 'node-fetch';
 import { MODEL_NAME } from '../constants/misc.js';
-import { Logger } from '../services/logger.js'; // Added Logger
-import { posthog } from './analytics.js'; // Import posthog
-import { env } from './env.js';
+import { Logger } from '../services/logger.js';
+import { posthog } from './analytics.js';
+import { getOpenAIClient } from '../services/openai-service.js';
 import { calculateReadTime } from './read-time.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { generateText } from 'ai';
+import { env } from './env.js';
 
-// Initialize OpenRouter Client
-const openrouter = createOpenRouter({
-    apiKey: env.OPENROUTER_API_KEY,
-});
+// Fallback OpenRouter client for when PostHog is not configured
+const openrouter = env.OPENROUTER_API_KEY
+    ? createOpenRouter({
+          apiKey: env.OPENROUTER_API_KEY,
+      })
+    : null;
 
 /**
  * Fetches the HTML content of a page, attempts to extract the body,
@@ -164,7 +167,8 @@ export async function fetchPageContent(url: string): Promise<string | null> {
 export async function summarizeContent(
     articleContent: string | null,
     commentsContent: string | null,
-    sourceUrl?: string // Keep sourceUrl optional for flexibility
+    sourceUrl?: string, // Keep sourceUrl optional for flexibility
+    language?: string | null // Language code for the summary (e.g., 'en', 'es', 'fr', 'de')
 ): Promise<{
     articleSummary: string | null;
     commentsSummary: string | null;
@@ -175,7 +179,7 @@ export async function summarizeContent(
     let articleReadTime: number | null = null;
 
     if (articleContent) {
-        articleSummary = await summarizeSingleContent(articleContent, 'ARTICLE CONTENT', sourceUrl);
+        articleSummary = await summarizeSingleContent(articleContent, 'ARTICLE CONTENT', sourceUrl, language);
         // Calculate read time for the original article content
         articleReadTime = calculateReadTime(articleContent);
     }
@@ -183,7 +187,8 @@ export async function summarizeContent(
         commentsSummary = await summarizeSingleContent(
             commentsContent,
             'COMMENTS CONTENT',
-            sourceUrl
+            sourceUrl,
+            language
         );
     }
     return { articleSummary, commentsSummary, articleReadTime };
@@ -192,7 +197,8 @@ export async function summarizeContent(
 async function summarizeSingleContent(
     content: string,
     contentType: 'ARTICLE CONTENT' | 'COMMENTS CONTENT',
-    sourceUrl?: string
+    sourceUrl?: string,
+    language?: string | null
 ): Promise<string | null> {
     if (!content) {
         Logger.warn(`[Summarizer] No ${contentType} provided for summarization.`);
@@ -205,6 +211,11 @@ async function summarizeSingleContent(
         content.length > maxInputLength
             ? content.substring(0, maxInputLength) + '\n[Content Truncated]'
             : content;
+    
+    const languageInstruction = language 
+        ? `7. **IMPORTANT: Write the summary entirely in ${language} language. Use the language code "${language}" to determine the target language (e.g., "en" = English, "es" = Spanish, "fr" = French, "de" = German, etc.).**`
+        : '';
+    
     const prompt = `
 You are an expert summarizer for Discord bot messages. Your task is to create a concise, neutral, and informative summary of the provided text.
 
@@ -215,7 +226,7 @@ You are an expert summarizer for Discord bot messages. Your task is to create a 
 4.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
 5.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
 6.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 5.
-
+${languageInstruction ? languageInstruction + '\n' : ''}
 **Content to Summarize:**
 ${truncatedContent}
 
@@ -226,12 +237,45 @@ ${truncatedContent}
             `[Summarizer] Sending ${contentType} from ${sourceUrl || 'source'} to ${MODEL_NAME}...`
         );
         const startTime = Date.now();
-        const { text } = await generateText({
-            model: model,
-            prompt: prompt,
-            maxTokens: 300,
-            temperature: 0.3,
-        });
+
+        const openAIClient = getOpenAIClient();
+        let text: string;
+
+        if (openAIClient) {
+            const response = await openAIClient.chat.completions.create({
+                model: MODEL_NAME,
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompt,
+                    },
+                ],
+                max_tokens: 300,
+                temperature: 0.3,
+                posthogDistinctId: 'system_summarizer',
+                posthogTraceId: `trace_${sourceUrl || 'unknown'}_${Date.now()}`,
+                posthogProperties: {
+                    contentType,
+                    sourceUrl: sourceUrl || undefined,
+                    contentLength: truncatedContent.length,
+                },
+                posthogPrivacyMode: false,
+            });
+
+            text = response.choices[0]?.message?.content || '';
+        } else if (openrouter) {
+            const model = openrouter(MODEL_NAME);
+            const result = await generateText({
+                model: model,
+                prompt: prompt,
+                maxTokens: 300,
+                temperature: 0.3,
+            });
+            text = result.text;
+        } else {
+            throw new Error('No OpenAI client available');
+        }
+
         const duration = Date.now() - startTime;
         Logger.info(
             `[Summarizer] Received summary from ${MODEL_NAME} (${duration}ms). Length: ${text?.length ?? 0}`
@@ -254,18 +298,22 @@ ${truncatedContent}
             });
             return text;
         }
-        posthog?.capture({
-            distinctId: 'system_summarizer',
-            event: 'summarization_success',
-            properties: {
-                model: MODEL_NAME,
-                sourceUrl: sourceUrl,
-                contentLength: truncatedContent.length,
-                summaryLength: text.length,
-                durationMs: duration,
-                contentType,
-            },
-        });
+
+        if (!openAIClient) {
+            posthog?.capture({
+                distinctId: 'system_summarizer',
+                event: 'summarization_success',
+                properties: {
+                    model: MODEL_NAME,
+                    sourceUrl: sourceUrl,
+                    contentLength: truncatedContent.length,
+                    summaryLength: text.length,
+                    durationMs: duration,
+                    contentType,
+                },
+            });
+        }
+
         return text.trim();
     } catch (error: any) {
         Logger.error(`[Summarizer] Error calling OpenRouter model ${MODEL_NAME}:`, error);

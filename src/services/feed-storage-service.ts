@@ -2,7 +2,7 @@ import { subHours } from 'date-fns';
 import { and, asc, count, eq, gte } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
-import { categories, feedFailures, feeds } from '../db/schema.js';
+import { categories, feedFailures, feeds, guilds } from '../db/schema.js';
 import { MAX_RECENT_LINKS } from '../constants/index.js';
 // Interface for Feed Configuration
 export interface FeedConfig {
@@ -28,6 +28,7 @@ export interface FeedConfig {
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
     disableFailureNotifications: boolean;
+    language?: string | null; // Language code for summaries - overrides guild language
 }
 
 // Lightweight interface for feed polling - excludes large text fields to save memory
@@ -46,6 +47,7 @@ export interface FeedPollConfig {
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
     disableFailureNotifications: boolean;
+    language?: string | null; // Language code for summaries - overrides guild language
 }
 
 // Interface for Category Configuration
@@ -238,6 +240,7 @@ export class FeedStorageService {
                     backoffUntil: feeds.backoffUntil,
                     ignoreErrors: feeds.ignoreErrors,
                     disableFailureNotifications: feeds.disableFailureNotifications,
+                    language: feeds.language,
                 })
                 .from(feeds)
                 .orderBy(asc(feeds.guildId), asc(feeds.channelId), asc(feeds.createdAt));
@@ -295,6 +298,7 @@ export class FeedStorageService {
             lastCommentsSummary?: string | null;
             ignoreErrors?: boolean | null;
             disableFailureNotifications?: boolean | null;
+            language?: string | null;
             // Note: recentLinks is handled separately by updateRecentLinks
         }
     ): Promise<boolean> {
@@ -313,6 +317,7 @@ export class FeedStorageService {
         if ('ignoreErrors' in updates) valuesToUpdate.ignoreErrors = updates.ignoreErrors;
         if ('disableFailureNotifications' in updates)
             valuesToUpdate.disableFailureNotifications = updates.disableFailureNotifications;
+        if ('language' in updates) valuesToUpdate.language = updates.language;
 
         if (Object.keys(valuesToUpdate).length === 0) {
             console.log(`[FeedStorageService] No details provided to update for feed ${feedId}`);
@@ -740,6 +745,74 @@ export class FeedStorageService {
         } catch (error) {
             console.error(`Error checking error message rate limit for feed ${feedId}:`, error);
             return true; // On error, allow sending to avoid suppressing important messages
+        }
+    }
+
+    // --- Guild Language Operations ---
+
+    /**
+     * Sets or updates the language for a guild.
+     */
+    public static async setGuildLanguage(guildId: string, language: string | null): Promise<void> {
+        try {
+            await (db as any)
+                .insert(guilds)
+                .values({
+                    guildId,
+                    language: language || null,
+                    updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                    target: [guilds.guildId],
+                    set: {
+                        language: language || null,
+                        updatedAt: new Date(),
+                    },
+                });
+        } catch (error) {
+            console.error(`Error setting guild language for ${guildId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Gets the language setting for a guild.
+     * @returns The language code or null if not set.
+     */
+    public static async getGuildLanguage(guildId: string): Promise<string | null> {
+        try {
+            const result = await (db as any)
+                .select({ language: guilds.language })
+                .from(guilds)
+                .where(eq(guilds.guildId, guildId))
+                .limit(1);
+            return result[0]?.language ?? null;
+        } catch (error) {
+            console.error(`Error getting guild language for ${guildId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Gets the effective language for a feed.
+     * Returns feed language if set, otherwise guild language, otherwise null.
+     */
+    public static async getEffectiveLanguage(
+        feedId: string,
+        guildId: string
+    ): Promise<string | null> {
+        try {
+            // First check if feed has a language set
+            const feed = await this.getFeedById(feedId);
+            if (feed?.language) {
+                return feed.language;
+            }
+
+            // Fall back to guild language
+            return await this.getGuildLanguage(guildId);
+        } catch (error) {
+            console.error(`Error getting effective language for feed ${feedId}:`, error);
+            return null;
         }
     }
 }

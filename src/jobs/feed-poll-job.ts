@@ -523,10 +523,16 @@ export class FeedPollJob extends Job {
                             `[FeedPollJob] Attempting summarization for: ${sourceUrl}` +
                                 (item.comments ? ` (incl. comments: ${item.comments})` : '')
                         );
+                        // Get effective language (feed language overrides guild language)
+                        const effectiveLanguage = await FeedStorageService.getEffectiveLanguage(
+                            feedConfig.id,
+                            feedConfig.guildId
+                        );
                         const summaries = await summarizeContent(
                             articleContent,
                             commentsContent,
-                            sourceUrl
+                            sourceUrl,
+                            effectiveLanguage
                         );
                         // Store summaries and read time in the item
                         item.articleSummary = summaries.articleSummary;

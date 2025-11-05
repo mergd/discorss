@@ -9,4 +9,4 @@ export const FAILURE_QUIET_PERIOD_HOURS = 24; // Quiet period after threshold is
 export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 5;
 export const MAX_MINUTES = 360; // 6 hours
-export const MODEL_NAME = 'google/gemini-2.0-flash-001';
+export const MODEL_NAME = 'google/gemini-2.5-flash-lite';

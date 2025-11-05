@@ -27,6 +27,27 @@ function getShortId(uuid: string): string {
     return uuid.substring(0, 8);
 }
 
+// Validate and normalize language code
+// Allows: 2-char codes (en, es), language-region codes (en-US, es-ES), or 3-char codes (eng, spa)
+function validateLanguageCode(language: string | null): string | null {
+    if (!language) return null;
+    
+    const trimmed = language.trim().toLowerCase();
+    
+    // Empty after trimming
+    if (!trimmed) return null;
+    
+    // Validate format: 2-10 characters, letters, numbers, and hyphens only
+    // Common formats: "en", "es", "en-us", "es-es", "pt-br", "eng", "spa"
+    const languageRegex = /^[a-z0-9]{2,10}(-[a-z0-9]{2,5})?$/;
+    
+    if (!languageRegex.test(trimmed)) {
+        return null;
+    }
+    
+    return trimmed;
+}
+
 // Helper function to generate the embed for a specific page
 async function generateFeedListPage(
     intr: ChatInputCommandInteraction,
@@ -151,6 +172,16 @@ export class FeedCommand implements Command {
                         const frequency = intr.options.getInteger('frequency'); // Optional frequency
                         const summarize = intr.options.getBoolean('summarize') ?? false;
                         const useArchiveLinks = intr.options.getBoolean('use_archive_links') ?? false;
+                        const languageInput = intr.options.getString('language');
+                        const language = validateLanguageCode(languageInput);
+                        
+                        if (languageInput && languageInput.trim() !== '' && !language) {
+                            await InteractionUtils.editReply(
+                                intr,
+                                `❌ Invalid language code: ${inlineCode(languageInput)}. Language codes should be 2-10 characters and may include a region (e.g., "en", "es", "en-us", "es-es", "pt-br").`
+                            );
+                            return;
+                        }
 
                         // URL validation (basic)
                         if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -249,11 +280,14 @@ export class FeedCommand implements Command {
                                             Logger.info(
                                                 `[FeedAdd] Summarizing initial item for ${url}`
                                             );
+                                            // Use provided language or guild language
+                                            const effectiveLanguage = language || await FeedStorageService.getGuildLanguage(intr.guild.id);
                                             const { articleSummary, commentsSummary } =
                                                 await summarizeContent(
                                                     articleContent,
                                                     commentsContent,
-                                                    firstItem.link || url
+                                                    firstItem.link || url,
+                                                    effectiveLanguage
                                                 );
                                             if (
                                                 articleSummary?.startsWith(
@@ -326,6 +360,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes: frequency,
                                 summarize: summarize,
                                 useArchiveLinks: useArchiveLinks,
+                                language: language || null,
                                 ignoreErrors: false,
                                 disableFailureNotifications: false,
                             };
@@ -662,6 +697,17 @@ export class FeedCommand implements Command {
                         const newFrequency = intr.options.getInteger('frequency');
                         const newSummarize = intr.options.getBoolean('summarize');
                         const newUseArchiveLinks = intr.options.getBoolean('use_archive_links');
+                        const newLanguageInput = intr.options.getString('language');
+                        // Empty string or whitespace means clear the language (null)
+                        const newLanguage = newLanguageInput?.trim() === '' ? null : validateLanguageCode(newLanguageInput);
+                        
+                        if (newLanguageInput !== null && newLanguageInput.trim() !== '' && !newLanguage) {
+                            await InteractionUtils.editReply(
+                                intr,
+                                `❌ Invalid language code: ${inlineCode(newLanguageInput)}. Language codes should be 2-10 characters and may include a region (e.g., "en", "es", "en-us", "es-es", "pt-br").`
+                            );
+                            return;
+                        }
 
                         // Validate channel type
                         if (
@@ -682,11 +728,12 @@ export class FeedCommand implements Command {
                             newCategory === null &&
                             newFrequency === null &&
                             newSummarize === null &&
-                            newUseArchiveLinks === null
+                            newUseArchiveLinks === null &&
+                            newLanguage === null
                         ) {
                             await InteractionUtils.editReply(
                                 intr,
-                                'Please provide at least one detail to update (nickname, category, frequency, summarize, or use_archive_links).'
+                                'Please provide at least one detail to update (nickname, category, frequency, summarize, use_archive_links, or language).'
                             );
                             return;
                         }
@@ -730,6 +777,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes?: number | null;
                                 summarize?: boolean | null;
                                 useArchiveLinks?: boolean | null;
+                                language?: string | null;
                                 lastArticleSummary?: string | null;
                                 lastCommentsSummary?: string | null;
                             } = {};
@@ -753,6 +801,8 @@ export class FeedCommand implements Command {
                                 updates.summarize = newSummarize;
                             if (intr.options.getBoolean('use_archive_links') !== null)
                                 updates.useArchiveLinks = newUseArchiveLinks;
+                            if (intr.options.getString('language') !== null)
+                                updates.language = newLanguage; // Already validated above
 
                             // Call the update service
                             const updated = await FeedStorageService.updateFeedDetails(
@@ -852,11 +902,17 @@ export class FeedCommand implements Command {
                                         if (pageContent) contentToSummarize = pageContent;
                                     }
                                     if (contentToSummarize) {
+                                        // Get effective language for this feed
+                                        const effectiveLanguage = await FeedStorageService.getEffectiveLanguage(
+                                            targetFeed.id,
+                                            targetFeed.guildId
+                                        );
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 contentToSummarize,
                                                 null,
-                                                feed.items[0].link
+                                                feed.items[0].link,
+                                                effectiveLanguage
                                             );
                                         updates.lastArticleSummary = articleSummary;
                                         updates.lastCommentsSummary = commentsSummary;
@@ -923,11 +979,14 @@ export class FeedCommand implements Command {
 
                                     // Generate summary if any content was fetched
                                     if (articleContent || commentsContent) {
+                                        // Get guild language for test summaries
+                                        const guildLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 articleContent,
                                                 commentsContent,
-                                                firstItem.link || url
+                                                firstItem.link || url,
+                                                guildLanguage
                                             );
                                         summary =
                                             articleSummary ||
@@ -1131,11 +1190,17 @@ ${linkLine}${snippet}`;
                                         }
 
                                         if (contentToSummarize) {
+                                            // Get effective language for this feed
+                                            const effectiveLanguage = await FeedStorageService.getEffectiveLanguage(
+                                                targetFeed.id,
+                                                targetFeed.guildId
+                                            );
                                             const { articleSummary, commentsSummary } =
                                                 await summarizeContent(
                                                     contentToSummarize,
                                                     null,
-                                                    latestItem.link
+                                                    latestItem.link,
+                                                    effectiveLanguage
                                                 );
                                             if (articleSummary) {
                                                 embed.addFields({
@@ -1180,6 +1245,53 @@ ${linkLine}${snippet}`;
                             await InteractionUtils.editReply(
                                 intr,
                                 '❌ An error occurred while trying to find or poke the feed. Please check the logs.'
+                            );
+                        }
+                        break;
+                    }
+                    case 'setlanguage': {
+                        const languageInput = intr.options.getString('language');
+                        // Empty string or whitespace means clear the language (null)
+                        const language = languageInput?.trim() === '' ? null : validateLanguageCode(languageInput);
+                        
+                        if (languageInput && languageInput.trim() !== '' && !language) {
+                            await InteractionUtils.editReply(
+                                intr,
+                                `❌ Invalid language code: ${inlineCode(languageInput)}. Language codes should be 2-10 characters and may include a region (e.g., "en", "es", "en-us", "es-es", "pt-br").`
+                            );
+                            return;
+                        }
+                        
+                        try {
+                            await FeedStorageService.setGuildLanguage(
+                                intr.guild.id,
+                                language
+                            );
+                            
+                            const currentLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
+                            const languageDisplay = currentLanguage || 'not set (defaults to English)';
+                            
+                            await InteractionUtils.editReply(
+                                intr,
+                                `✅ Server language has been set to ${inlineCode(languageDisplay)}. All feed summaries will be generated in this language unless a feed has its own language setting.`
+                            );
+                            
+                            if (posthog) {
+                                posthog.capture({
+                                    distinctId: intr.user.id,
+                                    event: 'guild_language_set',
+                                    properties: {
+                                        guildId: intr.guild.id,
+                                        language: language,
+                                        setBy: intr.user.id,
+                                    },
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error setting guild language:', error);
+                            await InteractionUtils.editReply(
+                                intr,
+                                '❌ An error occurred while setting the server language. Please check the logs.'
                             );
                         }
                         break;
@@ -1248,11 +1360,14 @@ ${linkLine}${snippet}`;
                                         // YouTube feeds don't have typical article content, summarize based on link/metadata?
                                         // Let's just pass the link and title to the summarizer for YT.
                                         const contentToSummarize = `Title: ${firstItem.title}\nLink: ${firstItem.link}\nDescription: ${firstItem.contentSnippet || ''}`;
+                                        // Use guild language for YT feed initial summary
+                                        const guildLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 contentToSummarize,
                                                 null,
-                                                firstItem.link
+                                                firstItem.link,
+                                                guildLanguage
                                             );
                                         initialSummary = articleSummary;
                                         if (

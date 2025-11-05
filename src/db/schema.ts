@@ -45,6 +45,7 @@ export const feeds = pgTable('feeds', {
     backoffUntil: timestamp('backoff_until', { mode: 'date' }),
     ignoreErrors: boolean('ignore_errors').notNull().default(false), // Skip error notifications for this feed
     disableFailureNotifications: boolean('disable_failure_notifications').notNull().default(false), // Skip failure threshold notifications
+    language: text('language'), // Language code for summaries (e.g., 'en', 'es', 'fr', 'de', etc.) - overrides guild language
 });
 
 // Table for storing individual feed failure events (for rolling 24hr checks)
@@ -104,3 +105,11 @@ export const feedFailuresRelations = relations(feedFailures, ({ one }) => ({
         references: [feeds.id],
     }),
 }));
+
+// Table for storing guild-level settings
+export const guilds = pgTable('guilds', {
+    guildId: text('guild_id').primaryKey(),
+    language: text('language'), // Language code (e.g., 'en', 'es', 'fr', 'de', etc.)
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+});
