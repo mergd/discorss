@@ -19,6 +19,7 @@ export interface FeedConfig {
     createdAt: Date;
     lastChecked?: Date | null;
     summarize: boolean;
+    useArchiveLinks: boolean;
     lastArticleSummary?: string | null;
     lastCommentsSummary?: string | null;
     recentLinks?: string[] | null;
@@ -40,6 +41,7 @@ export interface FeedPollConfig {
     lastItemGuid?: string | null;
     frequencyOverrideMinutes?: number | null;
     summarize: boolean;
+    useArchiveLinks: boolean;
     recentLinks?: string[] | null;
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
@@ -86,6 +88,7 @@ export class FeedStorageService {
             category: feedData.category || null,
             frequencyOverrideMinutes: feedData.frequencyOverrideMinutes ?? null,
             summarize: feedData.summarize ?? false,
+            useArchiveLinks: feedData.useArchiveLinks ?? false,
             // createdAt is handled by defaultNow() in pg schema
             // consecutiveFailures defaults to 0 in pg schema
             recentLinks: JSON.stringify([]), // Initialize with empty JSON array string
@@ -230,6 +233,7 @@ export class FeedStorageService {
                     lastItemGuid: feeds.lastItemGuid,
                     frequencyOverrideMinutes: feeds.frequencyOverrideMinutes,
                     summarize: feeds.summarize,
+                    useArchiveLinks: feeds.useArchiveLinks,
                     recentLinks: feeds.recentLinks,
                     backoffUntil: feeds.backoffUntil,
                     ignoreErrors: feeds.ignoreErrors,
@@ -286,6 +290,7 @@ export class FeedStorageService {
             category?: string | null;
             frequencyOverrideMinutes?: number | null;
             summarize?: boolean | null; // Use boolean directly
+            useArchiveLinks?: boolean | null;
             lastArticleSummary?: string | null;
             lastCommentsSummary?: string | null;
             ignoreErrors?: boolean | null;
@@ -300,6 +305,7 @@ export class FeedStorageService {
         if ('frequencyOverrideMinutes' in updates)
             valuesToUpdate.frequencyOverrideMinutes = updates.frequencyOverrideMinutes;
         if ('summarize' in updates) valuesToUpdate.summarize = updates.summarize;
+        if ('useArchiveLinks' in updates) valuesToUpdate.useArchiveLinks = updates.useArchiveLinks;
         if ('lastArticleSummary' in updates)
             valuesToUpdate.lastArticleSummary = updates.lastArticleSummary;
         if ('lastCommentsSummary' in updates)

@@ -632,6 +632,7 @@ export class FeedPollJob extends Job {
                         guildTextChannelType,
                         guildAnnouncementChannelType,
                         feedId,
+                        useArchiveLinks, // Pass archive links setting
                         paywalledDomainsList, // Receive the list of domains
                         messageFlags, // Import MessageFlags
                     } = context;
@@ -676,7 +677,9 @@ export class FeedPollJob extends Job {
                             }
                             let linkLine = displayLink ? `<${displayLink}>` : 'No link available.';
                             let hasPaywalledLink = false; // Track if we added an archive link
-                            if (link && isPaywalledInner(link, paywalledDomainsList)) {
+                            // Show archive link if useArchiveLinks is enabled OR if the link is paywalled
+                            const shouldShowArchive = useArchiveLinks || isPaywalledInner(link, paywalledDomainsList);
+                            if (link && shouldShowArchive) {
                                 linkLine += ` | [Archive](${getArchiveUrlInner(link)})`;
                                 hasPaywalledLink = true;
                             }
@@ -687,7 +690,9 @@ export class FeedPollJob extends Job {
                                     paywalledDomainsList
                                 );
                                 linkLine += ` | [Comments](<${item.comments}>)`;
-                                if (commentsIsPaywalled) {
+                                // Show archive for comments if useArchiveLinks is enabled OR if comments are paywalled
+                                const shouldShowArchiveComments = useArchiveLinks || commentsIsPaywalled;
+                                if (shouldShowArchiveComments) {
                                     linkLine += ` ([Archive](${getArchiveUrlInner(item.comments)}))`;
                                     hasPaywalledLink = true; // Also suppress embeds if comments are archived
                                 }
@@ -805,6 +810,7 @@ export class FeedPollJob extends Job {
                         guildTextChannelType: GuildTextChannelTypeValue,
                         guildAnnouncementChannelType: GuildAnnouncementChannelTypeValue,
                         feedId: feedConfig.id,
+                        useArchiveLinks: feedConfig.useArchiveLinks,
                         paywalledDomainsList: Array.from(PAYWALLED_DOMAINS), // Pass the set as an array
                         messageFlags: MessageFlags, // Pass MessageFlags enum
                     },

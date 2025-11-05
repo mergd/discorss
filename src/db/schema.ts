@@ -35,6 +35,7 @@ export const feeds = pgTable('feeds', {
     //     .$defaultFn(() => new Date()), // Set creation timestamp automatically
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
     summarize: boolean('summarize').notNull().default(false), // AI summarization enabled
+    useArchiveLinks: boolean('use_archive_links').notNull().default(false), // Enable archive.is links for paywalled content
     lastArticleSummary: text('last_article_summary'), // Last article summary (nullable)
     lastCommentsSummary: text('last_comments_summary'), // Last comments summary (nullable)
     // Add the new column for recent links (store as JSON string)

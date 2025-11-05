@@ -135,6 +135,12 @@ export const ChatCommandMetadata: {
                         description: 'Enable AI summaries for this feed (default: off)',
                         required: false,
                     },
+                    {
+                        type: ApplicationCommandOptionType.Boolean,
+                        name: 'use_archive_links',
+                        description: 'Enable archive.is links for all links (default: only for paywalled sites)',
+                        required: false,
+                    },
                 ],
             },
             {
@@ -233,6 +239,12 @@ export const ChatCommandMetadata: {
                         type: ApplicationCommandOptionType.Boolean,
                         name: 'summarize',
                         description: 'Enable or disable AI summaries for this feed',
+                        required: false,
+                    },
+                    {
+                        type: ApplicationCommandOptionType.Boolean,
+                        name: 'use_archive_links',
+                        description: 'Enable archive.is links for all links (default: only for paywalled sites)',
                         required: false,
                     },
                 ],

@@ -150,6 +150,7 @@ export class FeedCommand implements Command {
                         const category = intr.options.getString('category');
                         const frequency = intr.options.getInteger('frequency'); // Optional frequency
                         const summarize = intr.options.getBoolean('summarize') ?? false;
+                        const useArchiveLinks = intr.options.getBoolean('use_archive_links') ?? false;
 
                         // URL validation (basic)
                         if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -324,6 +325,7 @@ export class FeedCommand implements Command {
                                 addedBy: intr.user.id,
                                 frequencyOverrideMinutes: frequency,
                                 summarize: summarize,
+                                useArchiveLinks: useArchiveLinks,
                                 ignoreErrors: false,
                                 disableFailureNotifications: false,
                             };
@@ -659,6 +661,7 @@ export class FeedCommand implements Command {
                         const newCategory = intr.options.getString('category');
                         const newFrequency = intr.options.getInteger('frequency');
                         const newSummarize = intr.options.getBoolean('summarize');
+                        const newUseArchiveLinks = intr.options.getBoolean('use_archive_links');
 
                         // Validate channel type
                         if (
@@ -678,11 +681,12 @@ export class FeedCommand implements Command {
                             newNickname === null &&
                             newCategory === null &&
                             newFrequency === null &&
-                            newSummarize === null
+                            newSummarize === null &&
+                            newUseArchiveLinks === null
                         ) {
                             await InteractionUtils.editReply(
                                 intr,
-                                'Please provide at least one detail to update (nickname, category, or frequency).'
+                                'Please provide at least one detail to update (nickname, category, frequency, summarize, or use_archive_links).'
                             );
                             return;
                         }
@@ -725,6 +729,7 @@ export class FeedCommand implements Command {
                                 category?: string | null;
                                 frequencyOverrideMinutes?: number | null;
                                 summarize?: boolean | null;
+                                useArchiveLinks?: boolean | null;
                                 lastArticleSummary?: string | null;
                                 lastCommentsSummary?: string | null;
                             } = {};
@@ -734,6 +739,7 @@ export class FeedCommand implements Command {
                                 category: targetFeed.category,
                                 frequencyOverrideMinutes: targetFeed.frequencyOverrideMinutes,
                                 summarize: targetFeed.summarize,
+                                useArchiveLinks: targetFeed.useArchiveLinks,
                             };
 
                             // Only include fields that were actually provided in the command
@@ -745,6 +751,8 @@ export class FeedCommand implements Command {
                                 updates.frequencyOverrideMinutes = newFrequency;
                             if (intr.options.getBoolean('summarize') !== null)
                                 updates.summarize = newSummarize;
+                            if (intr.options.getBoolean('use_archive_links') !== null)
+                                updates.useArchiveLinks = newUseArchiveLinks;
 
                             // Call the update service
                             const updated = await FeedStorageService.updateFeedDetails(
@@ -777,6 +785,11 @@ export class FeedCommand implements Command {
                                         changes.summarize = {
                                             old: originalValues.summarize,
                                             new: updates.summarize,
+                                        };
+                                    if (updates.useArchiveLinks !== undefined)
+                                        changes.useArchiveLinks = {
+                                            old: originalValues.useArchiveLinks,
+                                            new: updates.useArchiveLinks,
                                         };
 
                                     if (Object.keys(changes).length > 0) {
@@ -1293,6 +1306,7 @@ ${linkLine}${snippet}`;
                                 addedBy: intr.user.id,
                                 frequencyOverrideMinutes: null, // YT feeds use default/category frequency
                                 summarize: summarize,
+                                useArchiveLinks: false, // YouTube feeds don't need archive links
                                 ignoreErrors: false,
                                 disableFailureNotifications: false,
                             };
