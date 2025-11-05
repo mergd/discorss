@@ -9,7 +9,7 @@ import { Manager } from './models/manager.js';
 import { HttpService, JobService, Logger, MasterApiService } from './services/index.js';
 import { JobRegistry } from './services/job-registry.js';
 import { env } from './utils/env.js';
-import { MathUtils, ShardUtils } from './utils/index.js';
+import { MathUtils, ShardUtils, memoryProfiler, leakDetector, enableTimerTracking } from './utils/index.js';
 
 const require = createRequire(import.meta.url);
 let Config = require('../config/config.json');
@@ -23,6 +23,23 @@ Config.developers = env.DEVELOPER_IDS.split(',');
 
 async function start(): Promise<void> {
     Logger.info(Logs.info.appStarted);
+
+    // Start memory profiling and leak detection
+    if (env.NODE_ENV === 'development' || process.env.ENABLE_MEMORY_PROFILING === 'true') {
+        Logger.info('[StartManager] Enabling memory profiling and leak detection...');
+        memoryProfiler.start();
+        leakDetector.start();
+        
+        // Enable timer tracking in development
+        if (env.NODE_ENV === 'development') {
+            enableTimerTracking();
+        }
+
+        // Log memory report every 10 minutes
+        setInterval(() => {
+            memoryProfiler.logDetailedReport();
+        }, 10 * 60 * 1000);
+    }
 
     // Dependencies
     let httpService = new HttpService();
@@ -101,6 +118,18 @@ async function start(): Promise<void> {
     const shutdown = async (signal: string) => {
         Logger.info(`[StartManager] Received ${signal}, starting graceful shutdown...`);
         try {
+            // Stop memory profiling
+            memoryProfiler.stop();
+            leakDetector.stop();
+            
+            // Export final memory report
+            try {
+                memoryProfiler.logDetailedReport();
+                memoryProfiler.exportSnapshots('/tmp/memory-snapshots-final.json');
+            } catch (error) {
+                Logger.error('[StartManager] Error exporting memory report:', error);
+            }
+
             if (Config.clustering.enabled && masterApiServiceInstance) {
                 try {
                     await masterApiServiceInstance.unregister();

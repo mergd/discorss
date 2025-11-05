@@ -12,3 +12,5 @@ export { ShardUtils } from './shard-utils.js';
 export { StringUtils } from './string-utils.js';
 export { ThreadUtils } from './thread-utils.js';
 export { env } from './env.js';
+export { memoryProfiler, getMemoryInfo, objectTracker } from './memory-profiler.js';
+export { leakDetector, enableTimerTracking } from './leak-detector.js';

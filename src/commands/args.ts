@@ -12,6 +12,18 @@ export class Args {
                 name: 'info',
                 value: DevCommandName.INFO,
             },
+            {
+                name: 'memory',
+                value: DevCommandName.MEMORY,
+            },
+            {
+                name: 'heap-snapshot',
+                value: DevCommandName.HEAP_SNAPSHOT,
+            },
+            {
+                name: 'force-gc',
+                value: DevCommandName.FORCE_GC,
+            },
         ],
     };
     public static readonly HELP_OPTION: APIApplicationCommandBasicOption = {
