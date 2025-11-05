@@ -235,6 +235,30 @@ export class FeedPollJob extends Job {
                 // Log feed queue stats
                 Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
             }
+
+            // Periodic cleanup: Remove stale feeds from queue (every 100 cycles = ~50 minutes)
+            if (cycleCount % 100 === 0) {
+                Logger.info('[FeedPollJob] Cleaning stale feeds from queue...');
+                const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+                let removed = 0;
+                for (const [feedId, item] of feedQueue) {
+                    if (item.nextCheck < oneDayAgo) {
+                        feedQueue.delete(feedId);
+                        removed++;
+                    }
+                }
+                if (removed > 0) {
+                    Logger.info(`[FeedPollJob] Removed ${removed} stale feeds from queue`);
+                }
+            }
+
+            // Periodic cleanup: Reset RSS parser to clear accumulated state (every 50 cycles = ~25 minutes)
+            if (cycleCount % 50 === 0) {
+                Logger.info('[FeedPollJob] Resetting RSS parser...');
+                const { resetRSSParser } = await import('../utils/rss-parser.js');
+                resetRSSParser();
+                Logger.info('[FeedPollJob] RSS parser reset complete');
+            }
         }, BATCH_CHECK_INTERVAL);
 
         Logger.info('[FeedPollJob] Batch processor started');
@@ -538,6 +562,11 @@ export class FeedPollJob extends Job {
                         item.articleSummary = summaries.articleSummary;
                         item.commentsSummary = summaries.commentsSummary;
                         item.articleReadTime = summaries.articleReadTime;
+                        
+                        // Clear large content objects to help GC
+                        articleContent = null;
+                        commentsContent = null;
+                        
                         if (
                             (summaries.articleSummary &&
                                 !summaries.articleSummary.startsWith(
@@ -563,6 +592,9 @@ export class FeedPollJob extends Job {
                         item.articleSummary = 'Could not generate summary: No content fetched.';
                     }
                 } catch (fetchOrSummarizeError) {
+                    // Clear content on error as well
+                    articleContent = null;
+                    commentsContent = null;
                     Logger.error(
                         `[FeedPollJob] Error fetching content or summarizing for ${sourceUrl}:`,
                         fetchOrSummarizeError
@@ -583,6 +615,10 @@ export class FeedPollJob extends Job {
             }
 
             itemsToSend.push(item);
+            
+            // Clear large content objects after adding to array to help GC
+            articleContent = null;
+            commentsContent = null;
         }
 
         // --- Message Sending (broadcastEval) ---
@@ -800,17 +836,18 @@ export class FeedPollJob extends Job {
                 {
                     context: {
                         channelId: feedConfig.channelId,
-                        // Reduce payload size by only sending essential data
+                        // Reduce payload size by truncating summaries aggressively to prevent memory leaks
+                        // Truncate summaries from 1500 chars to 500 chars to reduce memory usage
                         itemsToSendWithSummaries: itemsToSend.map(item => ({
-                            title: item.title,
+                            title: item.title?.substring(0, 150),
                             link: item.link,
                             pubDate: item.pubDate,
                             isoDate: item.isoDate,
                             creator: item.creator,
                             author: item.author,
                             comments: item.comments,
-                            articleSummary: item.articleSummary,
-                            commentsSummary: item.commentsSummary,
+                            articleSummary: item.articleSummary?.substring(0, 500),
+                            commentsSummary: item.commentsSummary?.substring(0, 500),
                             articleReadTime: item.articleReadTime,
                         })),
                         guildTextChannelType: GuildTextChannelTypeValue,
@@ -875,6 +912,10 @@ export class FeedPollJob extends Job {
             // Deduplicate links gathered from different shards (though usually only one shard posts)
             successfullyPostedLinks = [...new Set(allPostedLinks)];
 
+            // Clear large arrays to help GC
+            itemsToSend.length = 0;
+            allPostedLinks.length = 0;
+
             // Update recent links in DB if any posts were successful
             if (successfullyPostedLinks.length > 0) {
                 await FeedStorageService.updateRecentLinks(feedConfig.id, successfullyPostedLinks);
@@ -884,7 +925,7 @@ export class FeedPollJob extends Job {
             }
 
             // Determine overall success and handle failures/notifications
-            const allItemsAttempted = itemsToSend.length; // Use itemsToSend length
+            const allItemsAttempted = itemsAttempted; // Use stored value
             const allSucceeded =
                 totalSuccessfullySentItems === allItemsAttempted &&
                 !firstPermissionError &&

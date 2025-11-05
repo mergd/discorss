@@ -134,6 +134,17 @@ async function start(): Promise<void> {
 
     await bot.start();
 
+    // Periodic Discord.js cache clearing to prevent memory leaks (every 30 minutes)
+    const cacheClearInterval = setInterval(() => {
+        if (client.isReady()) {
+            Logger.info('[Bot] Clearing Discord.js caches to prevent memory leaks...');
+            client.guilds.cache.clear();
+            client.channels.cache.clear();
+            client.users.cache.clear();
+            Logger.info('[Bot] Discord.js caches cleared');
+        }
+    }, 30 * 60 * 1000); // Every 30 minutes
+
     // Store bot instance for graceful shutdown
     let botInstance = bot;
 
@@ -141,6 +152,11 @@ async function start(): Promise<void> {
     const shutdown = async (signal: string) => {
         Logger.info(`[StartBot] Received ${signal}, starting graceful shutdown...`);
         try {
+            // Clear cache clearing interval
+            if (cacheClearInterval) {
+                clearInterval(cacheClearInterval);
+            }
+            
             await botInstance.stop();
             
             // Reset RSS parser if used
