@@ -407,6 +407,7 @@ export class FeedCommand implements Command {
                                 language: language || null,
                                 ignoreErrors: false,
                                 disableFailureNotifications: false,
+                                disabled: false,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);
@@ -1570,6 +1571,7 @@ ${linkLine}${snippet}`;
                                 useArchiveLinks: false, // YouTube feeds don't need archive links
                                 ignoreErrors: false,
                                 disableFailureNotifications: true, // Enable quiet failures for YouTube feeds
+                                disabled: false,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);
