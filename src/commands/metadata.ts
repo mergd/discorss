@@ -294,6 +294,27 @@ export const ChatCommandMetadata: {
                     },
                 ],
             },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'errors',
+                description: 'View feed errors for this server or a specific feed.',
+                options: [
+                    {
+                        type: ApplicationCommandOptionType.String,
+                        name: 'feed_id',
+                        description: 'The ID or nickname of the feed to view errors for (optional).',
+                        required: false,
+                    },
+                    {
+                        type: ApplicationCommandOptionType.Integer,
+                        name: 'limit',
+                        description: 'Maximum number of errors to show (default: 10, max: 30).',
+                        required: false,
+                        min_value: 1,
+                        max_value: 30,
+                    },
+                ],
+            },
         ],
     },
     CATEGORY: {
