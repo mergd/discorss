@@ -328,6 +328,149 @@ export class FeedStorageService {
     }
 
     /**
+     * Searches for feeds by text query (nickname, URL, or ID).
+     * Prioritizes feeds in the current channel, then falls back to fuzzy search if no exact matches.
+     * @param guildId - The guild ID to search within
+     * @param query - The search query (searches nickname, URL, and ID)
+     * @param currentChannelId - Optional channel ID to prioritize results from
+     * @returns Array of matching feeds, sorted by relevance (current channel first, then by match quality)
+     */
+    public static async searchFeeds(
+        guildId: string,
+        query: string,
+        currentChannelId?: string
+    ): Promise<FeedConfig[]> {
+        try {
+            const normalizedQuery = query.toLowerCase().trim();
+
+            // First, try exact/partial matches
+            const allGuildFeeds = await this.getFeeds(guildId);
+
+            // Filter feeds that match the query
+            const matchingFeeds = allGuildFeeds.filter(feed => {
+                const nicknameMatch = feed.nickname?.toLowerCase().includes(normalizedQuery);
+                const urlMatch = feed.url.toLowerCase().includes(normalizedQuery);
+                const idMatch =
+                    feed.id.toLowerCase() === normalizedQuery ||
+                    feed.id.toLowerCase().startsWith(normalizedQuery);
+                const shortIdMatch = feed.id.substring(0, 8).toLowerCase() === normalizedQuery;
+
+                return nicknameMatch || urlMatch || idMatch || shortIdMatch;
+            });
+
+            // If we have matches, prioritize current channel
+            if (matchingFeeds.length > 0 && currentChannelId) {
+                const currentChannelFeeds = matchingFeeds.filter(
+                    f => f.channelId === currentChannelId
+                );
+                const otherChannelFeeds = matchingFeeds.filter(
+                    f => f.channelId !== currentChannelId
+                );
+                return [...currentChannelFeeds, ...otherChannelFeeds];
+            }
+
+            // If no exact matches, try fuzzy search
+            if (matchingFeeds.length === 0) {
+                return this.fuzzySearchFeeds(allGuildFeeds, normalizedQuery, currentChannelId);
+            }
+
+            return matchingFeeds;
+        } catch (error) {
+            console.error(
+                `Error searching feeds for guild ${guildId} with query "${query}":`,
+                error
+            );
+            return [];
+        }
+    }
+
+    /**
+     * Performs fuzzy search on feeds using a simple similarity scoring algorithm.
+     * @param feeds - Array of feeds to search
+     * @param query - Normalized search query
+     * @param currentChannelId - Optional channel ID to prioritize
+     * @returns Array of feeds sorted by relevance score
+     */
+    private static fuzzySearchFeeds(
+        feeds: FeedConfig[],
+        query: string,
+        currentChannelId?: string
+    ): FeedConfig[] {
+        const scoredFeeds = feeds.map(feed => {
+            let score = 0;
+
+            // Score based on nickname similarity
+            if (feed.nickname) {
+                const nicknameLower = feed.nickname.toLowerCase();
+                if (nicknameLower.includes(query)) {
+                    score += 10;
+                }
+                score += this.calculateSimilarity(query, nicknameLower) * 5;
+            }
+
+            // Score based on URL similarity
+            const urlLower = feed.url.toLowerCase();
+            if (urlLower.includes(query)) {
+                score += 8;
+            }
+            score += this.calculateSimilarity(query, urlLower) * 3;
+
+            // Boost score for current channel
+            if (currentChannelId && feed.channelId === currentChannelId) {
+                score += 5;
+            }
+
+            return { feed, score };
+        });
+
+        // Filter feeds with score > 0 and sort by score (descending)
+        const filteredFeeds = scoredFeeds.filter(item => item.score > 0);
+
+        // Separate current channel feeds from others
+        if (currentChannelId) {
+            const currentChannelFeeds = filteredFeeds.filter(
+                item => item.feed.channelId === currentChannelId
+            );
+            const otherChannelFeeds = filteredFeeds.filter(
+                item => item.feed.channelId !== currentChannelId
+            );
+
+            // Sort each group by score, then combine (current channel first)
+            currentChannelFeeds.sort((a, b) => b.score - a.score);
+            otherChannelFeeds.sort((a, b) => b.score - a.score);
+
+            return [...currentChannelFeeds, ...otherChannelFeeds].map(item => item.feed);
+        }
+
+        // No channel prioritization, just sort by score
+        return filteredFeeds.sort((a, b) => b.score - a.score).map(item => item.feed);
+    }
+
+    /**
+     * Calculates a simple similarity score between two strings.
+     * Uses substring matching and character overlap.
+     */
+    private static calculateSimilarity(str1: string, str2: string): number {
+        if (str1 === str2) return 1.0;
+        if (str2.includes(str1)) return 0.8;
+        if (str1.includes(str2)) return 0.6;
+
+        // Count common character sequences
+        let commonChars = 0;
+        const str1Chars = str1.split('');
+        const str2Chars = str2.split('');
+
+        for (const char of str1Chars) {
+            if (str2Chars.includes(char)) {
+                commonChars++;
+            }
+        }
+
+        const maxLength = Math.max(str1.length, str2.length);
+        return maxLength > 0 ? commonChars / maxLength : 0;
+    }
+
+    /**
      * Updates feed details (nickname, category, frequency, summarize, lastArticleSummary, lastCommentsSummary) using Drizzle.
      * @returns True if the feed was found and updated, false otherwise.
      */

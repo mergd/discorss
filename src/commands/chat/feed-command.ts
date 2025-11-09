@@ -31,20 +31,20 @@ function getShortId(uuid: string): string {
 // Allows: 2-char codes (en, es), language-region codes (en-US, es-ES), or 3-char codes (eng, spa)
 function validateLanguageCode(language: string | null): string | null {
     if (!language) return null;
-    
+
     const trimmed = language.trim().toLowerCase();
-    
+
     // Empty after trimming
     if (!trimmed) return null;
-    
+
     // Validate format: 2-10 characters, letters, numbers, and hyphens only
     // Common formats: "en", "es", "en-us", "es-es", "pt-br", "eng", "spa"
     const languageRegex = /^[a-z0-9]{2,10}(-[a-z0-9]{2,5})?$/;
-    
+
     if (!languageRegex.test(trimmed)) {
         return null;
     }
-    
+
     return trimmed;
 }
 
@@ -171,10 +171,11 @@ export class FeedCommand implements Command {
                         const category = intr.options.getString('category');
                         const frequency = intr.options.getInteger('frequency'); // Optional frequency
                         const summarize = intr.options.getBoolean('summarize') ?? false;
-                        const useArchiveLinks = intr.options.getBoolean('use_archive_links') ?? false;
+                        const useArchiveLinks =
+                            intr.options.getBoolean('use_archive_links') ?? false;
                         const languageInput = intr.options.getString('language');
                         const language = validateLanguageCode(languageInput);
-                        
+
                         if (languageInput && languageInput.trim() !== '' && !language) {
                             await InteractionUtils.editReply(
                                 intr,
@@ -281,7 +282,11 @@ export class FeedCommand implements Command {
                                                 `[FeedAdd] Summarizing initial item for ${url}`
                                             );
                                             // Use provided language or guild language
-                                            const effectiveLanguage = language || await FeedStorageService.getGuildLanguage(intr.guild.id);
+                                            const effectiveLanguage =
+                                                language ||
+                                                (await FeedStorageService.getGuildLanguage(
+                                                    intr.guild.id
+                                                ));
                                             const { articleSummary, commentsSummary } =
                                                 await summarizeContent(
                                                     articleContent,
@@ -459,24 +464,23 @@ export class FeedCommand implements Command {
                         }
 
                         try {
-                            // First, find the feed by nickname or short ID prefix to get the full ID
-                            const feedsInChannel = await FeedStorageService.getFeeds(
+                            // Search for feeds using text-based search (nickname, URL, or ID)
+                            const matchingFeeds = await FeedStorageService.searchFeeds(
                                 intr.guild.id,
+                                feedIdentifier,
                                 targetChannel.id
                             );
-                            const targetFeed = feedsInChannel.find(
-                                f =>
-                                    f.nickname?.toLowerCase() === feedIdentifier.toLowerCase() ||
-                                    f.id.startsWith(feedIdentifier)
-                            );
 
-                            if (!targetFeed) {
+                            if (matchingFeeds.length === 0) {
                                 await InteractionUtils.editReply(
                                     intr,
-                                    `❓ Could not find a feed with Nickname or Short ID \`${feedIdentifier}\` in <#${targetChannel.id}>.`
+                                    `❓ Could not find a feed matching \`${feedIdentifier}\` in this server.`
                                 );
                                 return;
                             }
+
+                            // Use the first result (already prioritized by channel)
+                            const targetFeed = matchingFeeds[0];
 
                             // Now, attempt removal using the full, resolved feed ID
                             const removed = await FeedStorageService.removeFeed(
@@ -699,9 +703,16 @@ export class FeedCommand implements Command {
                         const newUseArchiveLinks = intr.options.getBoolean('use_archive_links');
                         const newLanguageInput = intr.options.getString('language');
                         // Empty string or whitespace means clear the language (null)
-                        const newLanguage = newLanguageInput?.trim() === '' ? null : validateLanguageCode(newLanguageInput);
-                        
-                        if (newLanguageInput !== null && newLanguageInput.trim() !== '' && !newLanguage) {
+                        const newLanguage =
+                            newLanguageInput?.trim() === ''
+                                ? null
+                                : validateLanguageCode(newLanguageInput);
+
+                        if (
+                            newLanguageInput !== null &&
+                            newLanguageInput.trim() !== '' &&
+                            !newLanguage
+                        ) {
                             await InteractionUtils.editReply(
                                 intr,
                                 `❌ Invalid language code: ${inlineCode(newLanguageInput)}. Language codes should be 2-10 characters and may include a region (e.g., "en", "es", "en-us", "es-es", "pt-br").`
@@ -739,35 +750,23 @@ export class FeedCommand implements Command {
                         }
 
                         try {
-                            // Find the feed by ID, Short ID, or Nickname
-                            const feedsInChannel: FeedConfig[] = await FeedStorageService.getFeeds(
+                            // Search for feeds using text-based search (nickname, URL, or ID)
+                            const matchingFeeds = await FeedStorageService.searchFeeds(
                                 intr.guild.id,
+                                feedIdentifier,
                                 targetChannel.id
                             );
-                            let targetFeed: FeedConfig | undefined = feedsInChannel.find(
-                                f =>
-                                    f.id === feedIdentifier ||
-                                    f.nickname?.toLowerCase() === feedIdentifier.toLowerCase()
-                            );
 
-                            // If not found and looks like a short ID, try matching prefix
-                            if (
-                                !targetFeed &&
-                                feedIdentifier.length === 8 &&
-                                /^[a-f0-9-]+$/.test(feedIdentifier)
-                            ) {
-                                targetFeed = feedsInChannel.find(f =>
-                                    f.id.startsWith(feedIdentifier)
-                                );
-                            }
-
-                            if (!targetFeed) {
+                            if (matchingFeeds.length === 0) {
                                 await InteractionUtils.editReply(
                                     intr,
-                                    `❓ Could not find a feed with ID, Short ID, or Nickname \`${feedIdentifier}\` in <#${targetChannel.id}>.`
+                                    `❓ Could not find a feed matching \`${feedIdentifier}\` in this server.`
                                 );
                                 return;
                             }
+
+                            // Use the first result (already prioritized by channel)
+                            const targetFeed = matchingFeeds[0];
 
                             // Prepare updates - pass undefined if option not given, null if explicitly meant to clear (future potential?)
                             // Currently, getString/Integer return null if not provided.
@@ -903,10 +902,11 @@ export class FeedCommand implements Command {
                                     }
                                     if (contentToSummarize) {
                                         // Get effective language for this feed
-                                        const effectiveLanguage = await FeedStorageService.getEffectiveLanguage(
-                                            targetFeed.id,
-                                            targetFeed.guildId
-                                        );
+                                        const effectiveLanguage =
+                                            await FeedStorageService.getEffectiveLanguage(
+                                                targetFeed.id,
+                                                targetFeed.guildId
+                                            );
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 contentToSummarize,
@@ -934,8 +934,8 @@ export class FeedCommand implements Command {
                         const url = intr.options.getString('url', true);
                         const summarize = intr.options.getBoolean('summarize') ?? false;
                         try {
-                                    const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(url);
+                            const rssParser = getRSSParser();
+                            const feed = await rssParser.parseURL(url);
                             const embed = new EmbedBuilder()
                                 .setTitle(
                                     `Test Feed: ${StringUtils.truncate(feed.title || 'No Title', 150)}`
@@ -980,7 +980,10 @@ export class FeedCommand implements Command {
                                     // Generate summary if any content was fetched
                                     if (articleContent || commentsContent) {
                                         // Get guild language for test summaries
-                                        const guildLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
+                                        const guildLanguage =
+                                            await FeedStorageService.getGuildLanguage(
+                                                intr.guild.id
+                                            );
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 articleContent,
@@ -1116,35 +1119,23 @@ ${linkLine}${snippet}`;
                         }
 
                         try {
-                            // Find the feed by ID, Short ID, or Nickname
-                            const feedsInChannel: FeedConfig[] = await FeedStorageService.getFeeds(
+                            // Search for feeds using text-based search (nickname, URL, or ID)
+                            const matchingFeeds = await FeedStorageService.searchFeeds(
                                 intr.guild.id,
+                                feedIdentifier,
                                 targetChannel.id
                             );
-                            let targetFeed: FeedConfig | undefined = feedsInChannel.find(
-                                f =>
-                                    f.id === feedIdentifier ||
-                                    f.nickname?.toLowerCase() === feedIdentifier.toLowerCase()
-                            );
 
-                            // If not found and looks like a short ID, try matching prefix
-                            if (
-                                !targetFeed &&
-                                feedIdentifier.length === 8 &&
-                                /^[a-f0-9-]+$/.test(feedIdentifier)
-                            ) {
-                                targetFeed = feedsInChannel.find(f =>
-                                    f.id.startsWith(feedIdentifier)
-                                );
-                            }
-
-                            if (!targetFeed) {
+                            if (matchingFeeds.length === 0) {
                                 await InteractionUtils.editReply(
                                     intr,
-                                    `❓ Could not find a feed with ID, Short ID, or Nickname \`${feedIdentifier}\` in <#${targetChannel.id}>.`
+                                    `❓ Could not find a feed matching \`${feedIdentifier}\` in this server.`
                                 );
                                 return;
                             }
+
+                            // Use the first result (already prioritized by channel)
+                            const targetFeed = matchingFeeds[0];
 
                             // Feed found, now try to fetch and parse it
                             try {
@@ -1191,10 +1182,11 @@ ${linkLine}${snippet}`;
 
                                         if (contentToSummarize) {
                                             // Get effective language for this feed
-                                            const effectiveLanguage = await FeedStorageService.getEffectiveLanguage(
-                                                targetFeed.id,
-                                                targetFeed.guildId
-                                            );
+                                            const effectiveLanguage =
+                                                await FeedStorageService.getEffectiveLanguage(
+                                                    targetFeed.id,
+                                                    targetFeed.guildId
+                                                );
                                             const { articleSummary, commentsSummary } =
                                                 await summarizeContent(
                                                     contentToSummarize,
@@ -1252,8 +1244,11 @@ ${linkLine}${snippet}`;
                     case 'setlanguage': {
                         const languageInput = intr.options.getString('language');
                         // Empty string or whitespace means clear the language (null)
-                        const language = languageInput?.trim() === '' ? null : validateLanguageCode(languageInput);
-                        
+                        const language =
+                            languageInput?.trim() === ''
+                                ? null
+                                : validateLanguageCode(languageInput);
+
                         if (languageInput && languageInput.trim() !== '' && !language) {
                             await InteractionUtils.editReply(
                                 intr,
@@ -1261,21 +1256,21 @@ ${linkLine}${snippet}`;
                             );
                             return;
                         }
-                        
+
                         try {
-                            await FeedStorageService.setGuildLanguage(
-                                intr.guild.id,
-                                language
+                            await FeedStorageService.setGuildLanguage(intr.guild.id, language);
+
+                            const currentLanguage = await FeedStorageService.getGuildLanguage(
+                                intr.guild.id
                             );
-                            
-                            const currentLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
-                            const languageDisplay = currentLanguage || 'not set (defaults to English)';
-                            
+                            const languageDisplay =
+                                currentLanguage || 'not set (defaults to English)';
+
                             await InteractionUtils.editReply(
                                 intr,
                                 `✅ Server language has been set to ${inlineCode(languageDisplay)}. All feed summaries will be generated in this language unless a feed has its own language setting.`
                             );
-                            
+
                             if (posthog) {
                                 posthog.capture({
                                     distinctId: intr.user.id,
@@ -1361,7 +1356,10 @@ ${linkLine}${snippet}`;
                                         // Let's just pass the link and title to the summarizer for YT.
                                         const contentToSummarize = `Title: ${firstItem.title}\nLink: ${firstItem.link}\nDescription: ${firstItem.contentSnippet || ''}`;
                                         // Use guild language for YT feed initial summary
-                                        const guildLanguage = await FeedStorageService.getGuildLanguage(intr.guild.id);
+                                        const guildLanguage =
+                                            await FeedStorageService.getGuildLanguage(
+                                                intr.guild.id
+                                            );
                                         const { articleSummary, commentsSummary } =
                                             await summarizeContent(
                                                 contentToSummarize,
