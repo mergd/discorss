@@ -17,6 +17,9 @@ export function getRSSParser(): Parser<any, any> {
                     'comments',
                 ],
             },
+            // Allow feeds with empty titles or other minor issues
+            maxRedirects: 5,
+            timeout: 60000,
         });
     }
     return sharedParser;

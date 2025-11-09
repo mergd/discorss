@@ -443,6 +443,35 @@ export class FeedPollJob extends Job {
                 // Record the failure event
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
 
+                // Check if feed should be auto-disabled due to persistent errors
+                if (!feedConfig.ignoreErrors && !feedConfig.disabled) {
+                    const isDeadFeed = await FeedStorageService.shouldAutoDisableDeadFeed(feedConfig.id);
+                    if (isDeadFeed) {
+                        await FeedStorageService.autoDisableFeed(
+                            feedConfig.id,
+                            `Feed has been returning 400-level errors for more than 3 days: ${feedConfig.url}`
+                        );
+                        Logger.info(
+                            `[FeedPollJob] Auto-disabled feed ${feedConfig.id} (${feedConfig.url}) - dead feed (400-level for >3 days)`
+                        );
+                        await this.sendFeedDisabledNotification(feedConfig, '400-level errors', '3 days');
+                    } else {
+                        const isServerErrorFeed = await FeedStorageService.shouldAutoDisableServerErrorFeed(
+                            feedConfig.id
+                        );
+                        if (isServerErrorFeed) {
+                            await FeedStorageService.autoDisableFeed(
+                                feedConfig.id,
+                                `Feed has been returning 500+ errors for more than 1 week: ${feedConfig.url}`
+                            );
+                            Logger.info(
+                                `[FeedPollJob] Auto-disabled feed ${feedConfig.id} (${feedConfig.url}) - server errors (500+ for >1 week)`
+                            );
+                            await this.sendFeedDisabledNotification(feedConfig, '500+ server errors', '1 week');
+                        }
+                    }
+                }
+
                 // Apply backoff with category coordination
                 await this.applyBackoffWithCategoryCoordination(feedConfig);
 
@@ -1264,6 +1293,56 @@ export class FeedPollJob extends Job {
         } catch (broadcastError: any) {
             Logger.error(
                 `[FeedPollJob] Error sending feed error message for ${feedConfig.id}:`,
+                broadcastError
+            );
+        }
+    }
+
+    /**
+     * Sends a notification when a feed is auto-disabled due to persistent errors.
+     */
+    private async sendFeedDisabledNotification(
+        feedConfig: FeedConfig,
+        errorType: string,
+        timePeriod: string
+    ): Promise<void> {
+        const feedName = feedConfig.nickname || feedConfig.url;
+        const content = `🔴 **Feed Auto-Disabled**\n\nThe feed "${feedName}" has been automatically disabled because it has been consistently returning ${errorType} for more than ${timePeriod}.\n\n**Feed URL:** ${feedConfig.url}\n**Feed ID:** \`${feedConfig.id.substring(0, 8)}\`\n\n*The feed will no longer be polled. You can re-enable it with \`/feed edit\` if the issue is resolved.*`;
+
+        try {
+            const results = await this.manager.broadcastEval(
+                async (client, context) => {
+                    const { channelId, content } = context;
+                    const channel = client.channels.cache.get(channelId);
+                    if (!channel || !channel.isTextBased()) {
+                        return null;
+                    }
+
+                    if (!('send' in channel)) {
+                        return null;
+                    }
+
+                    try {
+                        await channel.send(content);
+                        return 'success';
+                    } catch (error: any) {
+                        return { error: error.message };
+                    }
+                },
+                { context: { channelId: feedConfig.channelId, content } }
+            );
+
+            const success = results.some(result => result === 'success');
+            if (success) {
+                Logger.info(`[FeedPollJob] Sent auto-disable notification for feed ${feedConfig.id}`);
+            } else {
+                Logger.warn(
+                    `[FeedPollJob] Failed to send auto-disable notification for feed ${feedConfig.id}: ${JSON.stringify(results)}`
+                );
+            }
+        } catch (broadcastError: any) {
+            Logger.error(
+                `[FeedPollJob] Error sending auto-disable notification for ${feedConfig.id}:`,
                 broadcastError
             );
         }
