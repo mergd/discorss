@@ -43,10 +43,14 @@ function formatRelativeTime(date: Date): string {
 }
 
 // Helper to detect and convert Twitter/X URLs to Nitter RSS format
-function detectAndConvertTwitterUrl(url: string): { isTwitter: boolean; convertedUrl?: string; username?: string } {
+function detectAndConvertTwitterUrl(url: string): {
+    isTwitter: boolean;
+    convertedUrl?: string;
+    username?: string;
+} {
     const twitterPattern = /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/([a-zA-Z0-9_]+)\/?$/;
     const match = url.match(twitterPattern);
-    
+
     if (match) {
         const username = match[3];
         return {
@@ -55,7 +59,7 @@ function detectAndConvertTwitterUrl(url: string): { isTwitter: boolean; converte
             username: username,
         };
     }
-    
+
     return { isTwitter: false };
 }
 
@@ -255,8 +259,8 @@ export class FeedCommand implements Command {
                             console.log(`Validating feed: ${feedUrl}`);
                             const rssParser = getRSSParser();
                             const feed = await rssParser.parseURL(feedUrl);
-                            
-                            if (!feed || (!feed.items || feed.items.length === 0)) {
+
+                            if (!feed || !feed.items || feed.items.length === 0) {
                                 await InteractionUtils.editReply(
                                     intr,
                                     `❌ **Feed Validation Failed**\n\nThe feed at ${inlineCode(feedUrl)} appears to be empty or invalid. Please check the URL and try again.\n\n*If this is a Twitter/X feed, note that Nitter instances may be down. Try a different Nitter instance or wait and try again later.*\n\n💡 You can test feeds with ${inlineCode('/feed poke')} if you've already added them.`
@@ -281,7 +285,6 @@ export class FeedCommand implements Command {
 
                         // Attempt to add the feed
                         try {
-
                             let initialSummary: string | null = null;
                             let articleContent: string | null = null;
                             let commentsContent: string | null = null;
@@ -1337,7 +1340,7 @@ ${linkLine}${snippet}`;
 
                         try {
                             let targetFeedId: string | undefined;
-                            
+
                             if (feedIdentifier) {
                                 const allFeeds = await FeedStorageService.getFeeds(intr.guild.id);
                                 let targetFeed: FeedConfig | undefined = allFeeds.find(
@@ -1389,22 +1392,26 @@ ${linkLine}${snippet}`;
                                 )
                                 .setColor('Red')
                                 .setTimestamp()
-                                .setFooter({ text: `Showing ${failures.length} most recent error(s)` });
+                                .setFooter({
+                                    text: `Showing ${failures.length} most recent error(s)`,
+                                });
 
                             const errorFields = failures.slice(0, 25).map((failure, index) => {
                                 const feedName = failure.feedNickname || getShortId(failure.feedId);
                                 const errorMsg = failure.errorMessage || 'Unknown error';
                                 const timeAgo = formatRelativeTime(failure.timestamp);
                                 const statusIcon = failure.ignoreErrors ? '🔇' : '⚠️';
-                                
-                                const urlDisplay = failure.feedUrl.length > 60 
-                                    ? failure.feedUrl.substring(0, 57) + '...' 
-                                    : failure.feedUrl;
-                                
-                                const errorDisplay = errorMsg.length > 600 
-                                    ? errorMsg.substring(0, 597) + '...' 
-                                    : errorMsg;
-                                
+
+                                const urlDisplay =
+                                    failure.feedUrl.length > 60
+                                        ? failure.feedUrl.substring(0, 57) + '...'
+                                        : failure.feedUrl;
+
+                                const errorDisplay =
+                                    errorMsg.length > 600
+                                        ? errorMsg.substring(0, 597) + '...'
+                                        : errorMsg;
+
                                 let value = `${statusIcon} **${feedName}**\n`;
                                 value += `Feed: \`${getShortId(failure.feedId)}\`\n`;
                                 value += `URL: ${urlDisplay}\n`;

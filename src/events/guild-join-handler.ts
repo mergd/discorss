@@ -1,4 +1,4 @@
-import { Guild, TextChannel } from 'discord.js';
+import { EmbedBuilder, Guild, TextChannel } from 'discord.js';
 import { createRequire } from 'node:module';
 
 import { ChatCommandMetadata } from '../commands/metadata.js';
@@ -54,23 +54,19 @@ export class GuildJoinHandler implements EventHandler {
             guild,
         });
 
-        // Welcome message
-        const commandData = [
-            ChatCommandMetadata.FEED,
-            ChatCommandMetadata.CATEGORY,
-            ChatCommandMetadata.YOUTUBE,
-            ChatCommandMetadata.HELP,
-            ChatCommandMetadata.INFO,
-        ];
+        // Build welcome embed
+        const feedCmd = await ClientUtils.findAppCommand(guild.client, ChatCommandMetadata.FEED.name);
+        const feedMention = feedCmd
+            ? FormatUtils.commandMention(feedCmd)
+            : `\`/${ChatCommandMetadata.FEED.name}\``;
 
-        let commandList = '';
-        for (const cmd of commandData) {
-            const appCommand = await ClientUtils.findAppCommand(guild.client, cmd.name);
-            const mention = appCommand
-                ? FormatUtils.commandMention(appCommand)
-                : `\`/${cmd.name}\``;
-            commandList += `> ${mention}: ${cmd.description}\\n`;
-        }
+        const youtubeCmd = await ClientUtils.findAppCommand(
+            guild.client,
+            ChatCommandMetadata.YOUTUBE.name
+        );
+        const youtubeMention = youtubeCmd
+            ? FormatUtils.commandMention(youtubeCmd)
+            : `\`/${ChatCommandMetadata.YOUTUBE.name}\``;
 
         const helpCmd = await ClientUtils.findAppCommand(
             guild.client,
@@ -80,20 +76,53 @@ export class GuildJoinHandler implements EventHandler {
             ? FormatUtils.commandMention(helpCmd)
             : `\`/${ChatCommandMetadata.HELP.name}\``;
 
-        const welcomeMessage = `👋 **Hello! I'm Discorss, your RSS feed companion!**
+        const welcomeEmbed = new EmbedBuilder()
+            .setTitle('👋 Welcome to Discorss!')
+            .setDescription(
+                `Thanks for adding me to **${guild.name}**! I'm here to help you stay updated by automatically bringing RSS feed and YouTube channel updates directly into your Discord server.`
+            )
+            .setColor('Aqua')
+            .addFields(
+                {
+                    name: '🚀 Quick Start',
+                    value: `**Add an RSS feed:**
+${feedMention} \`add\` \`url:https://example.com/feed.xml\`
 
-        I can help you stay updated by bringing RSS and YouTube channel updates directly into your server.
+**Add a YouTube channel:**
+${youtubeMention} \`add\` \`channel_id:UC...\`
 
-        Here are my main commands:
-        ${commandList}
+**List your feeds:**
+${feedMention} \`list\`
 
-        For more details on any command, use ${helpMention}. Let's get started!`;
+**Get help:**
+${helpMention}`,
+                    inline: false,
+                },
+                {
+                    name: '✨ Key Features',
+                    value: `• **RSS Feed Monitoring** - Track any RSS or Atom feed
+• **YouTube Integration** - Follow YouTube channels automatically
+• **AI Summaries** - Get AI-powered summaries of articles (optional)
+• **Categories** - Organize feeds with custom categories
+• **Custom Frequencies** - Control how often feeds are checked`,
+                    inline: false,
+                },
+                {
+                    name: '📚 Need Help?',
+                    value: `Use ${helpMention} to see all available commands and get detailed information about how to use them.`,
+                    inline: false,
+                }
+            )
+            .setTimestamp()
+            .setFooter({
+                text: 'Happy feed monitoring! 🎉',
+            });
 
         // Send welcome message to the server's notify channel
         let notifyChannel = await ClientUtils.findNotifyChannel(guild, data.langGuild);
         if (notifyChannel) {
             try {
-                await MessageUtils.send(notifyChannel, welcomeMessage);
+                await MessageUtils.send(notifyChannel, welcomeEmbed);
             } catch (error) {
                 Logger.error(Logs.error.messageSend, error);
             }
@@ -102,7 +131,7 @@ export class GuildJoinHandler implements EventHandler {
         // Send welcome message to owner
         if (owner) {
             try {
-                await MessageUtils.send(owner.user, welcomeMessage);
+                await MessageUtils.send(owner.user, welcomeEmbed);
             } catch (error) {
                 // Ignore DMs not sending
             }

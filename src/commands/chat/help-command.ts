@@ -19,9 +19,19 @@ export class HelpCommand implements Command {
         let embed: EmbedBuilder;
         switch (args.option) {
             case HelpOption.CONTACT_SUPPORT: {
+                const feedbackCmd = await ClientUtils.findAppCommand(
+                    intr.client,
+                    ChatCommandMetadata.FEEDBACK.name
+                );
+                const feedbackMention = feedbackCmd
+                    ? FormatUtils.commandMention(feedbackCmd)
+                    : `\`/${ChatCommandMetadata.FEEDBACK.name}\``;
+
                 embed = new EmbedBuilder()
                     .setTitle('Contact Support')
-                    .setDescription('To get support, contact williamx on discord :)')
+                    .setDescription(
+                        `If you're experiencing issues or have feedback, please use ${feedbackMention} to reach out to us.`
+                    )
                     .setColor('Blue');
                 break;
             }
@@ -41,12 +51,20 @@ export class HelpCommand implements Command {
 
                 const commandDescriptions = await Promise.all(commandList);
 
+                const feedbackCmd = await ClientUtils.findAppCommand(
+                    intr.client,
+                    ChatCommandMetadata.FEEDBACK.name
+                );
+                const feedbackMention = feedbackCmd
+                    ? FormatUtils.commandMention(feedbackCmd)
+                    : `\`/${ChatCommandMetadata.FEEDBACK.name}\``;
+
                 embed = new EmbedBuilder()
                     .setTitle('Command List')
                     .setDescription(
                         `Here are the available commands:\n\n${commandDescriptions.join(
                             '\n'
-                        )}\n\nUse </help option:Contact Support> for support details.`
+                        )}\n\nNeed help? Use ${feedbackMention} to report issues or provide feedback.`
                     )
                     .setColor('Green');
                 break;
