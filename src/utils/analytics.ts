@@ -5,6 +5,9 @@ import { env } from './env.js';
 export const posthog = env.POSTHOG_API_KEY
     ? new PostHog(env.POSTHOG_API_KEY, {
           host: 'https://app.posthog.com',
+          // Add memory-friendly configuration
+          flushAt: 20, // Flush after 20 events (default is 100)
+          flushInterval: 10000, // Flush every 10 seconds (default is 30s)
       })
     : null;
 

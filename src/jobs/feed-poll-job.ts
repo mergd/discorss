@@ -182,6 +182,8 @@ export class FeedPollJob extends Job {
     private startBatchProcessor(): void {
         const BATCH_CHECK_INTERVAL = 30000; // Check every 30 seconds
         const MAX_CONCURRENT_FEEDS = 5; // Limit concurrent feed checks
+        const MAX_QUEUE_SIZE = 5000; // Maximum feed queue size before warning
+        const STALE_FEED_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 7 days
         let cycleCount = 0;
 
         batchProcessorInterval = setInterval(async () => {
@@ -201,6 +203,9 @@ export class FeedPollJob extends Job {
 
             Logger.info(`[FeedPollJob] Batch checking ${feedsToCheck.length} feeds`);
 
+            // Track memory before batch processing
+            const memBefore = process.memoryUsage();
+
             // Process feeds in batches to avoid overwhelming the system
             const batches = [];
             for (let i = 0; i < feedsToCheck.length; i += MAX_CONCURRENT_FEEDS) {
@@ -211,10 +216,26 @@ export class FeedPollJob extends Job {
                 const promises = batch.map(feedId => this.processFeedInQueue(feedId));
                 await Promise.allSettled(promises);
 
+                // Clear promises array to help GC
+                promises.length = 0;
+
                 // Small delay between batches to prevent overwhelming
                 if (batches.length > 1) {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
+            }
+
+            // Clear batches array
+            batches.length = 0;
+
+            // Track memory after batch processing
+            const memAfter = process.memoryUsage();
+            const heapDelta = (memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024;
+
+            if (heapDelta > 10) {
+                Logger.warn(
+                    `[FeedPollJob] High memory delta after batch: ${heapDelta.toFixed(2)}MB`
+                );
             }
 
             // Periodic memory monitoring and garbage collection
@@ -234,6 +255,31 @@ export class FeedPollJob extends Job {
 
                 // Log feed queue stats
                 Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
+
+                // Check for queue size overflow
+                if (feedQueue.size > MAX_QUEUE_SIZE) {
+                    Logger.error(
+                        `[FeedPollJob] ⚠️  Feed queue size exceeded limit! Size: ${feedQueue.size}, Limit: ${MAX_QUEUE_SIZE}`
+                    );
+                }
+            }
+
+            // Periodic cleanup of stale feeds (every 20 cycles = 10 minutes)
+            if (cycleCount % 20 === 0) {
+                let staleCount = 0;
+                for (const [feedId, queueItem] of feedQueue) {
+                    const timeSinceCheck = now - queueItem.nextCheck;
+                    if (timeSinceCheck > STALE_FEED_THRESHOLD) {
+                        feedQueue.delete(feedId);
+                        staleCount++;
+                        Logger.info(
+                            `[FeedPollJob] Removed stale feed ${feedId} from queue (no check in 7 days)`
+                        );
+                    }
+                }
+                if (staleCount > 0) {
+                    Logger.info(`[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`);
+                }
             }
         }, BATCH_CHECK_INTERVAL);
 
@@ -796,7 +842,7 @@ export class FeedPollJob extends Job {
                                     allowedMentions: { parse: [] },
                                     // Suppress embeds if a paywalled link (article or comments) was detected
                                     flags: hasPaywalledLink
-                                        ? [messageFlags.SuppressEmbeds]
+                                        ? [messageFlags] // messageFlags is 4 (MessageFlags.SuppressEmbeds)
                                         : undefined,
                                 });
 
@@ -856,12 +902,12 @@ export class FeedPollJob extends Job {
                             commentsSummary: item.commentsSummary,
                             articleReadTime: item.articleReadTime,
                         })),
-                        guildTextChannelType: GuildTextChannelTypeValue,
-                        guildAnnouncementChannelType: GuildAnnouncementChannelTypeValue,
+                        guildTextChannelType: 0, // Use literal value instead of imported constant
+                        guildAnnouncementChannelType: 5, // Use literal value instead of imported constant
                         feedId: feedConfig.id,
                         useArchiveLinks: feedConfig.useArchiveLinks,
                         paywalledDomainsList: Array.from(PAYWALLED_DOMAINS), // Pass the set as an array
-                        messageFlags: MessageFlags, // Pass MessageFlags enum
+                        messageFlags: 4, // MessageFlags.SuppressEmbeds value
                     },
                 }
             );
@@ -918,6 +964,10 @@ export class FeedPollJob extends Job {
             // Deduplicate links gathered from different shards (though usually only one shard posts)
             successfullyPostedLinks = [...new Set(allPostedLinks)];
 
+            // Clear results array to help GC
+            results.length = 0;
+            allPostedLinks.length = 0;
+
             // Update recent links in DB if any posts were successful
             if (successfullyPostedLinks.length > 0) {
                 await FeedStorageService.updateRecentLinks(feedConfig.id, successfullyPostedLinks);
@@ -925,6 +975,9 @@ export class FeedPollJob extends Job {
                     `[FeedPollJob] Posted ${successfullyPostedLinks.length}/${itemsToSend.length} item(s) for feed ${feedConfig.id}. Updated recent links.`
                 );
             }
+
+            // Clear items arrays to help GC
+            itemsToSend.length = 0;
 
             // Determine overall success and handle failures/notifications
             const allItemsAttempted = itemsToSend.length; // Use itemsToSend length

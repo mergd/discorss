@@ -17,7 +17,12 @@ const pgClient = postgres(connectionString, {
     connect_timeout: 30, // 30 second connection timeout
     prepare: false, // Disable prepared statements to reduce memory
 });
-const dbInstance = drizzlePg(pgClient, { schema, logger: true });
+// Disable logger in production to reduce memory usage
+// Logger stores query strings which can accumulate
+const dbInstance = drizzlePg(pgClient, {
+    schema,
+    logger: process.env.NODE_ENV === 'development',
+});
 
 export const db = dbInstance;
 
