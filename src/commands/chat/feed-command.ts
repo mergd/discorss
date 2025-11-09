@@ -27,6 +27,38 @@ function getShortId(uuid: string): string {
     return uuid.substring(0, 8);
 }
 
+// Helper to format relative time
+function formatRelativeTime(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+}
+
+// Helper to detect and convert Twitter/X URLs to Nitter RSS format
+function detectAndConvertTwitterUrl(url: string): { isTwitter: boolean; convertedUrl?: string; username?: string } {
+    const twitterPattern = /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/([a-zA-Z0-9_]+)\/?$/;
+    const match = url.match(twitterPattern);
+    
+    if (match) {
+        const username = match[3];
+        return {
+            isTwitter: true,
+            convertedUrl: `https://nitter.net/${username}/rss`,
+            username: username,
+        };
+    }
+    
+    return { isTwitter: false };
+}
+
 // Validate and normalize language code
 // Allows: 2-char codes (en, es), language-region codes (en-US, es-ES), or 3-char codes (eng, spa)
 function validateLanguageCode(language: string | null): string | null {
@@ -193,6 +225,17 @@ export class FeedCommand implements Command {
                             return;
                         }
 
+                        // Check if this is a Twitter/X profile URL and convert to Nitter RSS
+                        const twitterCheck = detectAndConvertTwitterUrl(url);
+                        let feedUrl = url;
+                        if (twitterCheck.isTwitter) {
+                            feedUrl = twitterCheck.convertedUrl!;
+                            await InteractionUtils.editReply(
+                                intr,
+                                `⚠️ **Twitter/X Profile Detected**\n\nTwitter/X doesn't provide RSS feeds. I've converted this to use Nitter (a Twitter RSS proxy):\n\n**Original:** ${inlineCode(url)}\n**RSS Feed:** ${inlineCode(feedUrl)}\n\n*Note: Nitter instances can be unreliable. If this feed fails, try a different Nitter instance or remove the feed.*`
+                            );
+                        }
+
                         // Ensure the target channel (either specified or current) is valid
                         if (
                             !targetChannel ||
@@ -206,42 +249,38 @@ export class FeedCommand implements Command {
                             return;
                         }
 
-                        // Attempt to add the feed
+                        // Validate feed works before adding (fail early)
+                        let finalNickname = nickname;
                         try {
-                            let finalNickname = nickname;
+                            console.log(`Validating feed: ${feedUrl}`);
+                            const rssParser = getRSSParser();
+                            const feed = await rssParser.parseURL(feedUrl);
+                            
+                            if (!feed || (!feed.items || feed.items.length === 0)) {
+                                await InteractionUtils.editReply(
+                                    intr,
+                                    `❌ **Feed Validation Failed**\n\nThe feed at ${inlineCode(feedUrl)} appears to be empty or invalid. Please check the URL and try again.\n\n*If this is a Twitter/X feed, note that Nitter instances may be down. Try a different Nitter instance or wait and try again later.*\n\n💡 You can test feeds with ${inlineCode('/feed poke')} if you've already added them.`
+                                );
+                                return;
+                            }
 
                             // Auto-nickname if not provided
-                            if (!finalNickname) {
-                                try {
-                                    console.log(`Attempting to auto-nickname feed: ${url}`);
-                                    const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(url);
-                                    if (feed.title) {
-                                        finalNickname = feed.title.trim();
-                                        console.log(`Auto-nickname found: "${finalNickname}"`);
-                                    } else {
-                                        console.warn(
-                                            `Feed at ${url} has no title for auto-nicknaming.`
-                                        );
-                                        // Optional: Set a default or leave as null/handle differently
-                                    }
-                                } catch (parseError) {
-                                    console.error(
-                                        `Error fetching/parsing feed for auto-nickname (${url}):`,
-                                        parseError
-                                    );
-                                    // Decide how to handle error: fail, use default, etc.
-                                    // For now, we'll proceed without a nickname if auto-fetch fails
-                                    await InteractionUtils.editReply(
-                                        intr,
-                                        '⚠️ Could not automatically fetch the feed title. Proceeding without a nickname. You can set one later with `/feed update`.'
-                                        // We don't return here, let the add proceed without nickname
-                                    );
-                                    // If you want to *stop* the addition on error, uncomment below:
-                                    // await InteractionUtils.editReply(intr, '❌ Could not fetch feed title. Please provide a nickname or check the URL.');
-                                    // return;
-                                }
+                            if (!finalNickname && feed.title) {
+                                finalNickname = feed.title.trim();
+                                console.log(`Auto-nickname found: "${finalNickname}"`);
                             }
+                        } catch (parseError: any) {
+                            console.error(`Error validating feed (${feedUrl}):`, parseError);
+                            const errorMsg = parseError?.message || 'Unknown error';
+                            await InteractionUtils.editReply(
+                                intr,
+                                `❌ **Feed Validation Failed**\n\nCould not fetch or parse the RSS feed at ${inlineCode(feedUrl)}.\n\n**Error:** ${codeBlock(errorMsg.substring(0, 500))}\n\nPlease check:\n- The URL is correct and accessible\n- The feed is a valid RSS/Atom feed\n- If this is a Twitter/X feed, the Nitter instance may be down\n\n*Feeds must be valid RSS/Atom feeds. Twitter/X profile URLs are not RSS feeds.*\n\n💡 You can test feeds with ${inlineCode('/feed poke')} if you've already added them.`
+                            );
+                            return;
+                        }
+
+                        // Attempt to add the feed
+                        try {
 
                             let initialSummary: string | null = null;
                             let articleContent: string | null = null;
@@ -250,7 +289,7 @@ export class FeedCommand implements Command {
                             if (summarize) {
                                 try {
                                     const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(url);
+                                    const feed = await rssParser.parseURL(feedUrl);
                                     const firstItem = feed.items?.[0];
 
                                     if (firstItem) {
@@ -279,7 +318,7 @@ export class FeedCommand implements Command {
                                         // Generate summary if any content was fetched
                                         if (articleContent || commentsContent) {
                                             Logger.info(
-                                                `[FeedAdd] Summarizing initial item for ${url}`
+                                                `[FeedAdd] Summarizing initial item for ${feedUrl}`
                                             );
                                             // Use provided language or guild language
                                             const effectiveLanguage =
@@ -291,7 +330,7 @@ export class FeedCommand implements Command {
                                                 await summarizeContent(
                                                     articleContent,
                                                     commentsContent,
-                                                    firstItem.link || url,
+                                                    firstItem.link || feedUrl,
                                                     effectiveLanguage
                                                 );
                                             if (
@@ -311,7 +350,7 @@ export class FeedCommand implements Command {
                                             }
                                         } else {
                                             Logger.warn(
-                                                `[FeedAdd] No content found to summarize for initial item of ${url}`
+                                                `[FeedAdd] No content found to summarize for initial item of ${feedUrl}`
                                             );
                                             await InteractionUtils.send(
                                                 intr,
@@ -322,7 +361,7 @@ export class FeedCommand implements Command {
                                         }
                                     } else {
                                         Logger.warn(
-                                            `[FeedAdd] No items found in feed ${url} for initial summary.`
+                                            `[FeedAdd] No items found in feed ${feedUrl} for initial summary.`
                                         );
                                         await InteractionUtils.send(
                                             intr,
@@ -333,7 +372,7 @@ export class FeedCommand implements Command {
                                     }
                                 } catch (err: any) {
                                     Logger.error(
-                                        `[FeedAdd] Error fetching/summarizing initial item for ${url}:`,
+                                        `[FeedAdd] Error fetching/summarizing initial item for ${feedUrl}:`,
                                         err
                                     );
                                     await InteractionUtils.send(
@@ -356,7 +395,7 @@ export class FeedCommand implements Command {
                                 | 'recentLinks'
                                 | 'lastSummary'
                             > = {
-                                url: url,
+                                url: feedUrl,
                                 channelId: targetChannel.id,
                                 guildId: intr.guild.id,
                                 nickname: finalNickname,
@@ -1287,6 +1326,115 @@ ${linkLine}${snippet}`;
                             await InteractionUtils.editReply(
                                 intr,
                                 '❌ An error occurred while setting the server language. Please check the logs.'
+                            );
+                        }
+                        break;
+                    }
+                    case 'errors': {
+                        const feedIdentifier = intr.options.getString('feed_id');
+                        const limit = intr.options.getInteger('limit') ?? 10;
+
+                        try {
+                            let targetFeedId: string | undefined;
+                            
+                            if (feedIdentifier) {
+                                const allFeeds = await FeedStorageService.getFeeds(intr.guild.id);
+                                let targetFeed: FeedConfig | undefined = allFeeds.find(
+                                    f =>
+                                        f.id === feedIdentifier ||
+                                        f.nickname?.toLowerCase() === feedIdentifier.toLowerCase()
+                                );
+
+                                if (
+                                    !targetFeed &&
+                                    feedIdentifier.length === 8 &&
+                                    /^[a-f0-9-]+$/.test(feedIdentifier)
+                                ) {
+                                    targetFeed = allFeeds.find(f =>
+                                        f.id.startsWith(feedIdentifier)
+                                    );
+                                }
+
+                                if (!targetFeed) {
+                                    await InteractionUtils.editReply(
+                                        intr,
+                                        `❓ Could not find a feed with ID, Short ID, or Nickname \`${feedIdentifier}\` in this server.`
+                                    );
+                                    return;
+                                }
+
+                                targetFeedId = targetFeed.id;
+                            }
+
+                            const failures = await FeedStorageService.getFeedFailures(
+                                targetFeedId,
+                                intr.guild.id,
+                                limit
+                            );
+
+                            if (failures.length === 0) {
+                                const message = targetFeedId
+                                    ? `✅ No errors found for feed \`${getShortId(targetFeedId)}\` in this server.`
+                                    : `✅ No feed errors found for this server.`;
+                                await InteractionUtils.editReply(intr, message);
+                                return;
+                            }
+
+                            const embed = new EmbedBuilder()
+                                .setTitle(
+                                    targetFeedId
+                                        ? `Feed Errors: ${getShortId(targetFeedId)}`
+                                        : `Feed Errors for This Server`
+                                )
+                                .setColor('Red')
+                                .setTimestamp()
+                                .setFooter({ text: `Showing ${failures.length} most recent error(s)` });
+
+                            const errorFields = failures.slice(0, 25).map((failure, index) => {
+                                const feedName = failure.feedNickname || getShortId(failure.feedId);
+                                const errorMsg = failure.errorMessage || 'Unknown error';
+                                const timeAgo = formatRelativeTime(failure.timestamp);
+                                const statusIcon = failure.ignoreErrors ? '🔇' : '⚠️';
+                                
+                                const urlDisplay = failure.feedUrl.length > 60 
+                                    ? failure.feedUrl.substring(0, 57) + '...' 
+                                    : failure.feedUrl;
+                                
+                                const errorDisplay = errorMsg.length > 600 
+                                    ? errorMsg.substring(0, 597) + '...' 
+                                    : errorMsg;
+                                
+                                let value = `${statusIcon} **${feedName}**\n`;
+                                value += `Feed: \`${getShortId(failure.feedId)}\`\n`;
+                                value += `URL: ${urlDisplay}\n`;
+                                value += `Time: ${timeAgo}\n`;
+                                value += `Consecutive: ${failure.consecutiveFailures}\n`;
+                                value += `Error: ${codeBlock(errorDisplay)}`;
+
+                                if (value.length > 1024) {
+                                    value = value.substring(0, 1021) + '...';
+                                }
+
+                                return {
+                                    name: `Error #${index + 1}`,
+                                    value: value,
+                                };
+                            });
+
+                            embed.addFields(errorFields);
+
+                            if (failures.length > 25) {
+                                embed.setDescription(
+                                    `Showing the 25 most recent errors. Total: ${failures.length}`
+                                );
+                            }
+
+                            await InteractionUtils.editReply(intr, { embeds: [embed] });
+                        } catch (error) {
+                            console.error('Error fetching feed errors:', error);
+                            await InteractionUtils.editReply(
+                                intr,
+                                '❌ An error occurred while fetching feed errors. Please check the logs.'
                             );
                         }
                         break;

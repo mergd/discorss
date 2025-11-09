@@ -1,5 +1,5 @@
 import { subHours } from 'date-fns';
-import { and, asc, count, eq, gte, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_RECENT_LINKS } from '../constants/index.js';
 import { db } from '../db/index.js';
@@ -1030,6 +1030,72 @@ export class FeedStorageService {
         } catch (error) {
             console.error(`Error getting effective language for feed ${feedId}:`, error);
             return null;
+        }
+    }
+
+    /**
+     * Gets feed failure records with feed details.
+     * @param feedId Optional feed ID to filter by
+     * @param guildId Optional guild ID to filter by
+     * @param limit Maximum number of failures to return (default: 30)
+     * @returns Array of failure records with feed information
+     */
+    public static async getFeedFailures(
+        feedId?: string,
+        guildId?: string,
+        limit: number = 30
+    ): Promise<
+        Array<{
+            failureId: number;
+            timestamp: Date;
+            errorMessage: string | null;
+            feedId: string;
+            feedUrl: string;
+            feedNickname: string | null;
+            guildId: string;
+            channelId: string;
+            consecutiveFailures: number;
+            ignoreErrors: boolean;
+        }>
+    > {
+        try {
+            let query = (db as any)
+                .select({
+                    failureId: feedFailures.id,
+                    timestamp: feedFailures.timestamp,
+                    errorMessage: feedFailures.errorMessage,
+                    feedId: feedFailures.feedId,
+                    feedUrl: feeds.url,
+                    feedNickname: feeds.nickname,
+                    guildId: feeds.guildId,
+                    channelId: feeds.channelId,
+                    consecutiveFailures: feeds.consecutiveFailures,
+                    ignoreErrors: feeds.ignoreErrors,
+                })
+                .from(feedFailures)
+                .innerJoin(feeds, eq(feedFailures.feedId, feeds.id));
+
+            const conditions = [];
+            if (feedId) {
+                conditions.push(eq(feedFailures.feedId, feedId));
+            }
+            if (guildId) {
+                conditions.push(eq(feeds.guildId, guildId));
+            }
+
+            if (conditions.length > 0) {
+                query = query.where(and(...conditions));
+            }
+
+            const results = await query.orderBy(desc(feedFailures.timestamp)).limit(limit);
+
+            return results;
+        } catch (error) {
+            console.error(
+                `Error getting feed failures${feedId ? ` for feed ${feedId}` : ''}${guildId ? ` for guild ${guildId}` : ''}:`,
+                error
+            );
+            return [];
         }
     }
 }
