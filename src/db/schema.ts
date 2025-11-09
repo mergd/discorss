@@ -45,6 +45,7 @@ export const feeds = pgTable('feeds', {
     backoffUntil: timestamp('backoff_until', { mode: 'date' }),
     ignoreErrors: boolean('ignore_errors').notNull().default(false), // Skip error notifications for this feed
     disableFailureNotifications: boolean('disable_failure_notifications').notNull().default(false), // Skip failure threshold notifications
+    disabled: boolean('disabled').notNull().default(false), // Completely disable feed polling (auto-set for dead feeds)
     language: text('language'), // Language code for summaries (e.g., 'en', 'es', 'fr', 'de', etc.) - overrides guild language
 });
 

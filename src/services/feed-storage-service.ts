@@ -1,4 +1,4 @@
-import { subHours } from 'date-fns';
+import { subDays, subHours } from 'date-fns';
 import { and, asc, count, desc, eq, gte, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_RECENT_LINKS } from '../constants/index.js';
@@ -29,6 +29,7 @@ export interface FeedConfig {
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
     disableFailureNotifications: boolean;
+    disabled: boolean;
     language?: string | null; // Language code for summaries - overrides guild language
 }
 
@@ -48,6 +49,7 @@ export interface FeedPollConfig {
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
     disableFailureNotifications: boolean;
+    disabled: boolean;
     language?: string | null; // Language code for summaries - overrides guild language
 }
 
@@ -81,6 +83,7 @@ export class FeedStorageService {
             | 'backoffUntil'
             | 'ignoreErrors'
             | 'disableFailureNotifications'
+            | 'disabled'
         >
     ): Promise<string> {
         const id = uuidv4(); // Generate UUID in application code
@@ -100,6 +103,7 @@ export class FeedStorageService {
             backoffUntil: null, // Initialize with null
             ignoreErrors: false, // Initialize with false
             disableFailureNotifications: false, // Initialize with false
+            disabled: false, // Initialize with false
         };
 
         try {
@@ -264,9 +268,11 @@ export class FeedStorageService {
                     backoffUntil: feeds.backoffUntil,
                     ignoreErrors: feeds.ignoreErrors,
                     disableFailureNotifications: feeds.disableFailureNotifications,
+                    disabled: feeds.disabled,
                     language: feeds.language,
                 })
                 .from(feeds)
+                .where(eq(feeds.disabled, false))
                 .orderBy(asc(feeds.guildId), asc(feeds.channelId), asc(feeds.createdAt));
             // Parse recentLinks for each feed
             return results.map(feed => ({
@@ -1096,6 +1102,126 @@ export class FeedStorageService {
                 error
             );
             return [];
+        }
+    }
+
+    /**
+     * Extracts HTTP status code from error message.
+     * @param errorMessage Error message that may contain status code
+     * @returns Status code if found, null otherwise
+     */
+    private static extractStatusCode(errorMessage: string | null): number | null {
+        if (!errorMessage) return null;
+        
+        const statusMatch = errorMessage.match(/status code (\d{3})/i);
+        if (statusMatch) {
+            return parseInt(statusMatch[1], 10);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Checks if a feed has been consistently failing with 400-level errors for more than 3 days.
+     * @param feedId Feed ID to check
+     * @returns true if feed should be auto-disabled (400-level for >3 days)
+     */
+    public static async shouldAutoDisableDeadFeed(feedId: string): Promise<boolean> {
+        try {
+            const threeDaysAgo = subDays(new Date(), 3);
+            
+            const failures = await (db as any)
+                .select({
+                    timestamp: feedFailures.timestamp,
+                    errorMessage: feedFailures.errorMessage,
+                })
+                .from(feedFailures)
+                .where(
+                    and(
+                        eq(feedFailures.feedId, feedId),
+                        gte(feedFailures.timestamp, threeDaysAgo)
+                    )
+                )
+                .orderBy(desc(feedFailures.timestamp));
+
+            if (failures.length === 0) return false;
+
+            // Check if all failures in the last 3 days are 400-level errors (400-499)
+            const allDeadErrors = failures.every((failure: any) => {
+                const statusCode = this.extractStatusCode(failure.errorMessage);
+                return statusCode !== null && statusCode >= 400 && statusCode < 500;
+            });
+
+            // Also check if we have failures consistently over the 3 days
+            if (allDeadErrors && failures.length >= 3) {
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error(`Error checking if feed ${feedId} should be auto-disabled (dead):`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Checks if a feed has been consistently failing with 500+ errors for more than 1 week.
+     * @param feedId Feed ID to check
+     * @returns true if feed should be auto-disabled (500+ for >1 week)
+     */
+    public static async shouldAutoDisableServerErrorFeed(feedId: string): Promise<boolean> {
+        try {
+            const oneWeekAgo = subDays(new Date(), 7);
+            
+            const failures = await (db as any)
+                .select({
+                    timestamp: feedFailures.timestamp,
+                    errorMessage: feedFailures.errorMessage,
+                })
+                .from(feedFailures)
+                .where(
+                    and(
+                        eq(feedFailures.feedId, feedId),
+                        gte(feedFailures.timestamp, oneWeekAgo)
+                    )
+                )
+                .orderBy(desc(feedFailures.timestamp));
+
+            if (failures.length === 0) return false;
+
+            // Check if all failures in the last week are 500+ errors
+            const allServerErrors = failures.every((failure: any) => {
+                const statusCode = this.extractStatusCode(failure.errorMessage);
+                return statusCode !== null && statusCode >= 500;
+            });
+
+            // Also check if we have failures consistently over the week
+            if (allServerErrors && failures.length >= 3) {
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error(`Error checking if feed ${feedId} should be auto-disabled (server error):`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Auto-disables a feed by setting disabled to true (stops polling entirely).
+     * @param feedId Feed ID to disable
+     * @param reason Reason for auto-disabling
+     */
+    public static async autoDisableFeed(feedId: string, reason: string): Promise<void> {
+        try {
+            await (db as any)
+                .update(feeds)
+                .set({ disabled: true })
+                .where(eq(feeds.id, feedId));
+            
+            console.log(`[FeedStorageService] Auto-disabled feed ${feedId}: ${reason}`);
+        } catch (error) {
+            console.error(`Error auto-disabling feed ${feedId}:`, error);
         }
     }
 }
