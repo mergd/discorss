@@ -1,9 +1,10 @@
 import { subHours } from 'date-fns';
-import { and, asc, count, eq, gte } from 'drizzle-orm';
+import { and, asc, count, eq, gte, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { MAX_RECENT_LINKS } from '../constants/index.js';
 import { db } from '../db/index.js';
 import { categories, feedFailures, feeds, guilds } from '../db/schema.js';
-import { MAX_RECENT_LINKS } from '../constants/index.js';
+import { posthog } from '../utils/analytics.js';
 // Interface for Feed Configuration
 export interface FeedConfig {
     id: string;
@@ -214,6 +215,29 @@ export class FeedStorageService {
             }));
         } catch (error) {
             console.error('Error getting all feeds:', error);
+
+            // PostHog Error Capture
+            if (posthog) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                const errorStack = error instanceof Error ? error.stack : undefined;
+
+                posthog.capture({
+                    distinctId: 'system_feed_storage',
+                    event: '$exception',
+                    properties: {
+                        $exception_type: 'DatabaseQueryError',
+                        $exception_message: errorMessage,
+                        $exception_stack_trace: errorStack,
+                        method: 'getAllFeeds',
+                        query: 'select all feeds',
+                        error_code: (error as any)?.code,
+                        error_detail: (error as any)?.detail,
+                        error_position: (error as any)?.position,
+                        error_routine: (error as any)?.routine,
+                    },
+                });
+            }
+
             return []; // Return empty array on error
         }
     }
@@ -251,6 +275,29 @@ export class FeedStorageService {
             }));
         } catch (error) {
             console.error('Error getting all feeds for polling:', error);
+
+            // PostHog Error Capture
+            if (posthog) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                const errorStack = error instanceof Error ? error.stack : undefined;
+
+                posthog.capture({
+                    distinctId: 'system_feed_storage',
+                    event: '$exception',
+                    properties: {
+                        $exception_type: 'DatabaseQueryError',
+                        $exception_message: errorMessage,
+                        $exception_stack_trace: errorStack,
+                        method: 'getAllFeedsForPolling',
+                        query: 'select feeds for polling',
+                        error_code: (error as any)?.code,
+                        error_detail: (error as any)?.detail,
+                        error_position: (error as any)?.position,
+                        error_routine: (error as any)?.routine,
+                    },
+                });
+            }
+
             return []; // Return empty array on error
         }
     }
@@ -571,6 +618,33 @@ export class FeedStorageService {
             await (db as any).update(feeds).set({ backoffUntil: null }).where(eq(feeds.id, feedId));
         } catch (error) {
             console.error(`Error clearing backoffUntil for feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Gets feed IDs by category and guild for backoff coordination.
+     */
+    public static async getFeedIdsByCategory(
+        guildId: string,
+        category: string,
+        excludeFeedId?: string
+    ): Promise<string[]> {
+        try {
+            const conditions: any[] = [eq(feeds.guildId, guildId), eq(feeds.category, category)];
+            if (excludeFeedId) {
+                conditions.push(ne(feeds.id, excludeFeedId));
+            }
+            const results = await (db as any)
+                .select({ id: feeds.id })
+                .from(feeds)
+                .where(and(...conditions));
+            return results.map((r: any) => r.id);
+        } catch (error) {
+            console.error(
+                `Error getting feed IDs by category for guild ${guildId}, category ${category}:`,
+                error
+            );
+            return [];
         }
     }
 

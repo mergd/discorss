@@ -1423,7 +1423,7 @@ ${linkLine}${snippet}`;
                                 summarize: summarize,
                                 useArchiveLinks: false, // YouTube feeds don't need archive links
                                 ignoreErrors: false,
-                                disableFailureNotifications: false,
+                                disableFailureNotifications: true, // Enable quiet failures for YouTube feeds
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);

@@ -9,9 +9,9 @@ import {
     TextChannel,
     codeBlock,
 } from 'discord.js';
-import Parser from 'rss-parser';
 import {
     BASE_MINUTES,
+    CATEGORY_BACKOFF_COORDINATION_FACTOR,
     DEFAULT_FREQUENCY_MINUTES,
     FAILURE_NOTIFICATION_THRESHOLD,
     FAILURE_QUIET_PERIOD_HOURS,
@@ -25,8 +25,8 @@ import { PAYWALLED_DOMAINS } from '../constants/paywalled-sites.js';
 import {
     CategoryConfig,
     FeedConfig,
-    FeedStorageService,
     FeedPollConfig,
+    FeedStorageService,
 } from '../services/feed-storage-service.js';
 import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
@@ -268,6 +268,52 @@ export class FeedPollJob extends Job {
         }
     }
 
+    /**
+     * Applies exponential backoff to a feed and coordinates backoff with other feeds in the same category.
+     */
+    private async applyBackoffWithCategoryCoordination(
+        feedConfig: FeedConfig | FeedPollConfig
+    ): Promise<void> {
+        const fails =
+            ('consecutiveFailures' in feedConfig ? (feedConfig.consecutiveFailures ?? 0) : 0) + 1;
+        const backoffMinutes = Math.min(BASE_MINUTES * Math.pow(2, fails), MAX_MINUTES);
+        const backoffUntil = new Date(Date.now() + backoffMinutes * 60 * 1000);
+        await FeedStorageService.setBackoffUntil(feedConfig.id, backoffUntil);
+
+        if (feedConfig.category) {
+            const categoryFeedIds = await FeedStorageService.getFeedIdsByCategory(
+                feedConfig.guildId,
+                feedConfig.category,
+                feedConfig.id
+            );
+            if (categoryFeedIds.length > 0) {
+                const coordinatedBackoffMinutes = Math.floor(
+                    backoffMinutes * CATEGORY_BACKOFF_COORDINATION_FACTOR
+                );
+                const coordinatedBackoffUntil = new Date(
+                    Date.now() + coordinatedBackoffMinutes * 60 * 1000
+                );
+                for (const categoryFeedId of categoryFeedIds) {
+                    const categoryFeed = await FeedStorageService.getFeedById(categoryFeedId);
+                    if (categoryFeed) {
+                        const existingBackoff = categoryFeed.backoffUntil
+                            ? new Date(categoryFeed.backoffUntil)
+                            : null;
+                        if (!existingBackoff || coordinatedBackoffUntil > existingBackoff) {
+                            await FeedStorageService.setBackoffUntil(
+                                categoryFeedId,
+                                coordinatedBackoffUntil
+                            );
+                            Logger.info(
+                                `[FeedPollJob] Applied coordinated backoff (${coordinatedBackoffMinutes} min) to category feed ${categoryFeedId} due to failure in feed ${feedConfig.id} (category: ${feedConfig.category})`
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Check a single feed for new items (now fetches fresh config including links)
     public async checkFeed(feedId: string): Promise<void> {
         // Fetch the latest feed config from DB, including recent links
@@ -397,13 +443,8 @@ export class FeedPollJob extends Job {
                 // Record the failure event
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
 
-                // --- Backoff calculation ---
-                // Exponential backoff: BASE * 2^consecutiveFailures, capped
-
-                const fails = (feedConfig.consecutiveFailures ?? 0) + 1; // +1 because recordFailure increments after this call
-                const backoffMinutes = Math.min(BASE_MINUTES * Math.pow(2, fails), MAX_MINUTES);
-                const backoffUntil = new Date(Date.now() + backoffMinutes * 60 * 1000);
-                await FeedStorageService.setBackoffUntil(feedConfig.id, backoffUntil);
+                // Apply backoff with category coordination
+                await this.applyBackoffWithCategoryCoordination(feedConfig);
 
                 // Check the failure count within the last 24 hours
                 const failureCountLast24h = await FeedStorageService.getFailureCountLast24h(
@@ -684,7 +725,8 @@ export class FeedPollJob extends Job {
                             let linkLine = displayLink ? `<${displayLink}>` : 'No link available.';
                             let hasPaywalledLink = false; // Track if we added an archive link
                             // Show archive link if useArchiveLinks is enabled OR if the link is paywalled
-                            const shouldShowArchive = useArchiveLinks || isPaywalledInner(link, paywalledDomainsList);
+                            const shouldShowArchive =
+                                useArchiveLinks || isPaywalledInner(link, paywalledDomainsList);
                             if (link && shouldShowArchive) {
                                 linkLine += ` | [Archive](${getArchiveUrlInner(link)})`;
                                 hasPaywalledLink = true;
@@ -697,7 +739,8 @@ export class FeedPollJob extends Job {
                                 );
                                 linkLine += ` | [Comments](<${item.comments}>)`;
                                 // Show archive for comments if useArchiveLinks is enabled OR if comments are paywalled
-                                const shouldShowArchiveComments = useArchiveLinks || commentsIsPaywalled;
+                                const shouldShowArchiveComments =
+                                    useArchiveLinks || commentsIsPaywalled;
                                 if (shouldShowArchiveComments) {
                                     linkLine += ` ([Archive](${getArchiveUrlInner(item.comments)}))`;
                                     hasPaywalledLink = true; // Also suppress embeds if comments are archived
