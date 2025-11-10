@@ -480,8 +480,8 @@ export class FeedPollJob extends Job {
                 `[FeedPollJob] Error checking feed ${feedConfig.id} (${feedConfig.url}): ${errorMessage}`
             );
 
-            // Send user-friendly error message to channel (rate limited) - only if not ignoring errors
-            if (!feedConfig.ignoreErrors) {
+            // Send user-friendly error message to channel (rate limited) - only if not ignoring errors and failure notifications are enabled
+            if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications) {
                 await this.sendFeedErrorMessage(feedConfig, error, 'fetch');
             }
 
@@ -684,8 +684,8 @@ export class FeedPollJob extends Job {
                         fetchOrSummarizeError
                     );
 
-                    // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors
-                    if (!feedConfig.ignoreErrors) {
+                    // Send user-friendly error message for summarization failures (rate limited) - only if not ignoring errors and failure notifications are enabled
+                    if (!feedConfig.ignoreErrors && !feedConfig.disableFailureNotifications) {
                         await this.sendFeedErrorMessage(
                             feedConfig,
                             fetchOrSummarizeError,
@@ -1284,6 +1284,14 @@ export class FeedPollJob extends Job {
         if (feedConfig.ignoreErrors) {
             Logger.info(
                 `[FeedPollJob] Skipping error message for feed ${feedConfig.id} - errors are ignored`
+            );
+            return;
+        }
+
+        // Skip if failure notifications are disabled for this feed
+        if (feedConfig.disableFailureNotifications) {
+            Logger.info(
+                `[FeedPollJob] Skipping error message for feed ${feedConfig.id} - failure notifications are disabled`
             );
             return;
         }
