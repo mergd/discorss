@@ -2,8 +2,8 @@ import { Job } from './job.js';
 import { Logger } from '../services/index.js';
 
 export class DailyRestartJob implements Job {
-    public name = 'Daily Restart';
-    public schedule: string = '0 4 * * *'; // 4 AM UTC daily
+    public name = 'Periodic Restart';
+    public schedule: string = '0 */12 * * *'; // Every 12 hours
     public log: boolean = true;
     public runOnce = false;
     public initialDelaySecs = 0;
