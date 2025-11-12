@@ -15,5 +15,12 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "exclude": ["dist", "node_modules", "tests", "src/drizzle.config.ts", "disable", "cron-restart.ts"]
+    "exclude": [
+        "dist",
+        "node_modules",
+        "tests",
+        "src/drizzle.config.ts",
+        "disable",
+        "cron-restart.ts"
+    ]
 }
