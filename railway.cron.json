@@ -1,11 +1,10 @@
 {
-  "$schema": "https://railway.com/railway.schema.json",
-  "build": {
-    "builder": "RAILPACK"
-  },
-  "deploy": {
-    "startCommand": "bun run ./cron-restart.ts",
-    "cronSchedule": "0 */12 * * *"
-  }
+    "$schema": "https://railway.com/railway.schema.json",
+    "build": {
+        "builder": "RAILPACK"
+    },
+    "deploy": {
+        "startCommand": "node cron-restart.js",
+        "cronSchedule": "0 */12 * * *"
+    }
 }
-

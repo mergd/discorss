@@ -1,15 +1,15 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Railway Cron Service - Bot Restarter
- *
+ * 
  * This script is meant to be deployed as a SEPARATE Railway service
- * with a cron schedule
- *
+ * with a cron schedule (e.g., "0 */12 * * *" for every 12 hours).
+ * 
  * It restarts the main bot service via Railway's API, then exits.
  */
 
 const RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN;
-const SERVICE_ID = process.env.BOT_SERVICE_ID; // The main bot's service ID
+const SERVICE_ID = process.env.BOT_SERVICE_ID;
 
 if (!RAILWAY_API_TOKEN || !SERVICE_ID) {
     console.error('Error: RAILWAY_API_TOKEN and BOT_SERVICE_ID must be set');
@@ -30,7 +30,7 @@ async function restartBotService() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${RAILWAY_API_TOKEN}`,
+                'Authorization': `Bearer ${RAILWAY_API_TOKEN}`,
             },
             body: JSON.stringify({
                 query: mutation,
@@ -60,3 +60,4 @@ async function restartBotService() {
 }
 
 restartBotService();
+

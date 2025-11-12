@@ -21,6 +21,6 @@
         "tests",
         "src/drizzle.config.ts",
         "disable",
-        "cron-restart.ts"
+        "cron-restart.js"
     ]
 }
