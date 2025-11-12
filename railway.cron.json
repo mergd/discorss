@@ -4,7 +4,7 @@
         "builder": "RAILPACK"
     },
     "deploy": {
-        "startCommand": "node cron-restart.js",
+        "startCommand": "bun cron-restart.js",
         "cronSchedule": "0 */12 * * *"
     }
 }
