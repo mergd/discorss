@@ -3,7 +3,7 @@
  * Railway Cron Service - Bot Restarter
  * 
  * This script is meant to be deployed as a SEPARATE Railway service
- * with a cron schedule (e.g., "0 */12 * * *" for every 12 hours).
+ * with a cron schedule (e.g., "0 0,12 * * *" for every 12 hours).
  * 
  * It restarts the main bot service via Railway's API, then exits.
  */
