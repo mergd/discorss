@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import type { ChatCompletionCreateParams } from 'openai/resources/chat/completions';
 import { MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js';
 import { posthog } from './analytics.js';
@@ -256,7 +257,12 @@ ${truncatedContent}
 
         const distinctId = guildId || 'system_summarizer';
 
-        const response = await openAIClient.chat.completions.create({
+        const requestParams: ChatCompletionCreateParams & {
+            posthogDistinctId?: string;
+            posthogTraceId?: string;
+            posthogProperties?: Record<string, unknown>;
+            posthogPrivacyMode?: boolean;
+        } = {
             model: MODEL_NAME,
             messages: [
                 {
@@ -264,18 +270,23 @@ ${truncatedContent}
                     content: prompt,
                 },
             ],
-            max_tokens: 300,
+            max_completion_tokens: 300,
             temperature: 0.3,
-            posthogDistinctId: distinctId,
-            posthogTraceId: `trace_${sourceUrl || 'unknown'}_${Date.now()}`,
-            posthogProperties: {
+        };
+
+        if (posthog) {
+            requestParams.posthogDistinctId = distinctId;
+            requestParams.posthogTraceId = `trace_${sourceUrl || 'unknown'}_${Date.now()}`;
+            requestParams.posthogProperties = {
                 contentType,
                 sourceUrl: sourceUrl || undefined,
                 contentLength: truncatedContent.length,
                 guildId: guildId || undefined,
-            },
-            posthogPrivacyMode: false,
-        });
+            };
+            requestParams.posthogPrivacyMode = false;
+        }
+
+        const response = await openAIClient.chat.completions.create(requestParams);
 
         const text = response.choices[0]?.message?.content || '';
         const usage = response.usage;
