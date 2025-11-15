@@ -44,7 +44,6 @@
     "dependencies": {
         "@discordjs/rest": "^2.2.0",
         "@libsql/client": "^0.15.3",
-        "@openrouter/ai-sdk-provider": "^0.4.5",
         "@posthog/ai": "^6.5.1",
         "@types/pg": "^8.11.11",
         "ai": "^4.3.7",

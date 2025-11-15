@@ -6,14 +6,13 @@ import { env } from '../utils/env.js';
 let openAIClient: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI | null {
-    if (!posthog || !env.OPENROUTER_API_KEY) {
+    if (!posthog || !env.OPENAI_API_KEY) {
         return null;
     }
 
     if (!openAIClient) {
         openAIClient = new OpenAI({
-            apiKey: env.OPENROUTER_API_KEY,
-            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: env.OPENAI_API_KEY,
             posthog: posthog,
         });
     }

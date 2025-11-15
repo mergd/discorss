@@ -14,7 +14,7 @@ This is a Discord RSS bot called "Discorss" that automatically polls RSS feeds a
 - **Runtime**: Node.js 18+ with TypeScript
 - **Discord**: discord.js v14 with hybrid sharding
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI**: OpenRouter AI SDK for content summarization
+- **AI**: OpenAI API for content summarization
 - **Package Manager**: pnpm
 - **Testing**: Vitest
 

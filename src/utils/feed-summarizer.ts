@@ -4,16 +4,6 @@ import { Logger } from '../services/logger.js';
 import { posthog } from './analytics.js';
 import { getOpenAIClient } from '../services/openai-service.js';
 import { calculateReadTime } from './read-time.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { generateText } from 'ai';
-import { env } from './env.js';
-
-// Fallback OpenRouter client for when PostHog is not configured
-const openrouter = env.OPENROUTER_API_KEY
-    ? createOpenRouter({
-          apiKey: env.OPENROUTER_API_KEY,
-      })
-    : null;
 
 /**
  * Fetches the HTML content of a page, attempts to extract the body,
@@ -161,7 +151,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
 }
 
 /**
- * Summarizes the given content using an AI model via OpenRouter.
+ * Summarizes the given content using an AI model via OpenAI.
  * Handles potential errors and structures the prompt carefully.
  */
 export async function summarizeContent(
@@ -205,7 +195,6 @@ async function summarizeSingleContent(
         return 'Could not generate summary: No content available.';
     }
 
-    const model = openrouter(MODEL_NAME);
     const maxInputLength = 15000;
     const truncatedContent =
         content.length > maxInputLength
@@ -239,42 +228,31 @@ ${truncatedContent}
         const startTime = Date.now();
 
         const openAIClient = getOpenAIClient();
-        let text: string;
-
-        if (openAIClient) {
-            const response = await openAIClient.chat.completions.create({
-                model: MODEL_NAME,
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
-                max_tokens: 300,
-                temperature: 0.3,
-                posthogDistinctId: 'system_summarizer',
-                posthogTraceId: `trace_${sourceUrl || 'unknown'}_${Date.now()}`,
-                posthogProperties: {
-                    contentType,
-                    sourceUrl: sourceUrl || undefined,
-                    contentLength: truncatedContent.length,
-                },
-                posthogPrivacyMode: false,
-            });
-
-            text = response.choices[0]?.message?.content || '';
-        } else if (openrouter) {
-            const model = openrouter(MODEL_NAME);
-            const result = await generateText({
-                model: model,
-                prompt: prompt,
-                maxTokens: 300,
-                temperature: 0.3,
-            });
-            text = result.text;
-        } else {
+        if (!openAIClient) {
             throw new Error('No OpenAI client available');
         }
+
+        const response = await openAIClient.chat.completions.create({
+            model: MODEL_NAME,
+            messages: [
+                {
+                    role: 'user',
+                    content: prompt,
+                },
+            ],
+            max_tokens: 300,
+            temperature: 0.3,
+            posthogDistinctId: 'system_summarizer',
+            posthogTraceId: `trace_${sourceUrl || 'unknown'}_${Date.now()}`,
+            posthogProperties: {
+                contentType,
+                sourceUrl: sourceUrl || undefined,
+                contentLength: truncatedContent.length,
+            },
+            posthogPrivacyMode: false,
+        });
+
+        const text = response.choices[0]?.message?.content || '';
 
         const duration = Date.now() - startTime;
         Logger.info(
@@ -299,24 +277,22 @@ ${truncatedContent}
             return text;
         }
 
-        if (!openAIClient) {
-            posthog?.capture({
-                distinctId: 'system_summarizer',
-                event: 'summarization_success',
-                properties: {
-                    model: MODEL_NAME,
-                    sourceUrl: sourceUrl,
-                    contentLength: truncatedContent.length,
-                    summaryLength: text.length,
-                    durationMs: duration,
-                    contentType,
-                },
-            });
-        }
+        posthog?.capture({
+            distinctId: 'system_summarizer',
+            event: 'summarization_success',
+            properties: {
+                model: MODEL_NAME,
+                sourceUrl: sourceUrl,
+                contentLength: truncatedContent.length,
+                summaryLength: text.length,
+                durationMs: duration,
+                contentType,
+            },
+        });
 
         return text.trim();
     } catch (error: any) {
-        Logger.error(`[Summarizer] Error calling OpenRouter model ${MODEL_NAME}:`, error);
+        Logger.error(`[Summarizer] Error calling OpenAI model ${MODEL_NAME}:`, error);
         posthog?.capture({
             distinctId: 'system_summarizer',
             event: '$exception',

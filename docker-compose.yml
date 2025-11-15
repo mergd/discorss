@@ -28,7 +28,7 @@ services:
             DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
             DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
             DEVELOPER_IDS: ${DEVELOPER_IDS}
-            OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
         depends_on:
             db:
                 condition: service_healthy
