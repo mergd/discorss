@@ -334,7 +334,8 @@ export class FeedCommand implements Command {
                                                     articleContent,
                                                     commentsContent,
                                                     firstItem.link || feedUrl,
-                                                    effectiveLanguage
+                                                    effectiveLanguage,
+                                                    intr.guild.id
                                                 );
                                             if (
                                                 articleSummary?.startsWith(
@@ -955,7 +956,8 @@ export class FeedCommand implements Command {
                                                 contentToSummarize,
                                                 null,
                                                 feed.items[0].link,
-                                                effectiveLanguage
+                                                effectiveLanguage,
+                                                targetFeed.guildId
                                             );
                                         updates.lastArticleSummary = articleSummary;
                                         updates.lastCommentsSummary = commentsSummary;
@@ -1032,7 +1034,8 @@ export class FeedCommand implements Command {
                                                 articleContent,
                                                 commentsContent,
                                                 firstItem.link || url,
-                                                guildLanguage
+                                                guildLanguage,
+                                                intr.guild.id
                                             );
                                         summary =
                                             articleSummary ||
@@ -1235,7 +1238,8 @@ ${linkLine}${snippet}`;
                                                     contentToSummarize,
                                                     null,
                                                     latestItem.link,
-                                                    effectiveLanguage
+                                                    effectiveLanguage,
+                                                    targetFeed.guildId
                                                 );
                                             if (articleSummary) {
                                                 embed.addFields({
@@ -1521,7 +1525,8 @@ ${linkLine}${snippet}`;
                                                 contentToSummarize,
                                                 null,
                                                 firstItem.link,
-                                                guildLanguage
+                                                guildLanguage,
+                                                intr.guild.id
                                             );
                                         initialSummary = articleSummary;
                                         if (

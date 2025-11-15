@@ -85,14 +85,24 @@ async function analyzeFeedFailures() {
         console.log('\nRECOMMENDATIONS:');
         console.log('-'.repeat(80));
 
-        const networkErrors = sortedPatterns.filter(([p]) =>
-            p.toLowerCase().includes('network') || p.toLowerCase().includes('timeout') || p.toLowerCase().includes('fetch')
+        const networkErrors = sortedPatterns.filter(
+            ([p]) =>
+                p.toLowerCase().includes('network') ||
+                p.toLowerCase().includes('timeout') ||
+                p.toLowerCase().includes('fetch')
         );
-        const parseErrors = sortedPatterns.filter(([p]) =>
-            p.toLowerCase().includes('parse') || p.toLowerCase().includes('xml') || p.toLowerCase().includes('invalid')
+        const parseErrors = sortedPatterns.filter(
+            ([p]) =>
+                p.toLowerCase().includes('parse') ||
+                p.toLowerCase().includes('xml') ||
+                p.toLowerCase().includes('invalid')
         );
-        const authErrors = sortedPatterns.filter(([p]) =>
-            p.toLowerCase().includes('401') || p.toLowerCase().includes('403') || p.toLowerCase().includes('unauthorized') || p.toLowerCase().includes('forbidden')
+        const authErrors = sortedPatterns.filter(
+            ([p]) =>
+                p.toLowerCase().includes('401') ||
+                p.toLowerCase().includes('403') ||
+                p.toLowerCase().includes('unauthorized') ||
+                p.toLowerCase().includes('forbidden')
         );
 
         if (networkErrors.length > 0) {
@@ -117,13 +127,14 @@ async function analyzeFeedFailures() {
 
         const feedsWithManyFailures = sortedFeeds.filter(([, count]) => count >= 3);
         if (feedsWithManyFailures.length > 0) {
-            console.log(`  ⚠️  ${feedsWithManyFailures.length} feed(s) have 3+ failures. Consider disabling or investigating.`);
+            console.log(
+                `  ⚠️  ${feedsWithManyFailures.length} feed(s) have 3+ failures. Consider disabling or investigating.`
+            );
         }
 
         console.log('\n  ✅ Consider adding a command to view errors:');
         console.log('     /feed errors [feed_id] [guild_id]');
         console.log('     This would help users debug issues faster.');
-
     } catch (error) {
         console.error('Error analyzing feed failures:', error);
         throw error;
@@ -156,7 +167,11 @@ function categorizeError(errorMessage: string): string {
     if (msg.includes('status code 429') || msg.includes('rate limit')) {
         return 'Rate Limit (429)';
     }
-    if (msg.includes('unexpected close tag') || msg.includes('invalid character in entity name') || msg.includes('attribute without value')) {
+    if (
+        msg.includes('unexpected close tag') ||
+        msg.includes('invalid character in entity name') ||
+        msg.includes('attribute without value')
+    ) {
         return 'XML Parse Error';
     }
     if (msg.includes('unable to parse xml') || msg.includes('feed not recognized')) {
@@ -173,4 +188,3 @@ function categorizeError(errorMessage: string): string {
 }
 
 analyzeFeedFailures().catch(console.error);
-

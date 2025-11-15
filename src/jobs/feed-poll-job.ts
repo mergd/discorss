@@ -491,7 +491,9 @@ export class FeedPollJob extends Job {
 
                 // Check if feed should be auto-disabled due to persistent errors
                 if (!feedConfig.ignoreErrors && !feedConfig.disabled) {
-                    const isDeadFeed = await FeedStorageService.shouldAutoDisableDeadFeed(feedConfig.id);
+                    const isDeadFeed = await FeedStorageService.shouldAutoDisableDeadFeed(
+                        feedConfig.id
+                    );
                     if (isDeadFeed) {
                         await FeedStorageService.autoDisableFeed(
                             feedConfig.id,
@@ -500,11 +502,16 @@ export class FeedPollJob extends Job {
                         Logger.info(
                             `[FeedPollJob] Auto-disabled feed ${feedConfig.id} (${feedConfig.url}) - dead feed (400-level for >3 days)`
                         );
-                        await this.sendFeedDisabledNotification(feedConfig, '400-level errors', '3 days');
-                    } else {
-                        const isServerErrorFeed = await FeedStorageService.shouldAutoDisableServerErrorFeed(
-                            feedConfig.id
+                        await this.sendFeedDisabledNotification(
+                            feedConfig,
+                            '400-level errors',
+                            '3 days'
                         );
+                    } else {
+                        const isServerErrorFeed =
+                            await FeedStorageService.shouldAutoDisableServerErrorFeed(
+                                feedConfig.id
+                            );
                         if (isServerErrorFeed) {
                             await FeedStorageService.autoDisableFeed(
                                 feedConfig.id,
@@ -513,7 +520,11 @@ export class FeedPollJob extends Job {
                             Logger.info(
                                 `[FeedPollJob] Auto-disabled feed ${feedConfig.id} (${feedConfig.url}) - server errors (500+ for >1 week)`
                             );
-                            await this.sendFeedDisabledNotification(feedConfig, '500+ server errors', '1 week');
+                            await this.sendFeedDisabledNotification(
+                                feedConfig,
+                                '500+ server errors',
+                                '1 week'
+                            );
                         }
                     }
                 }
@@ -648,7 +659,8 @@ export class FeedPollJob extends Job {
                             articleContent,
                             commentsContent,
                             sourceUrl,
-                            effectiveLanguage
+                            effectiveLanguage,
+                            feedConfig.guildId
                         );
                         // Store summaries and read time in the item
                         item.articleSummary = summaries.articleSummary;
@@ -1155,6 +1167,17 @@ export class FeedPollJob extends Job {
         failureCount: number, // This is now the 24-hour count
         isPermissionError: boolean = false
     ): Promise<void> {
+        // Skip notifications for YouTube feeds (they're known to be unreliable)
+        const isYouTubeFeed =
+            feedConfig.url?.includes('youtube.com/feeds/videos.xml') ||
+            feedConfig.category === 'YouTube';
+        if (isYouTubeFeed || feedConfig.disableFailureNotifications) {
+            Logger.info(
+                `[FeedPollJob] Skipping failure notification for feed ${feedConfig.id} - YouTube feed or notifications disabled`
+            );
+            return;
+        }
+
         // --- Reusable truncate function (defined once) ---
         const truncate = (input: string, length: number, addEllipsis: boolean = false): string => {
             if (input === null || input === undefined) return '';
@@ -1395,7 +1418,9 @@ export class FeedPollJob extends Job {
 
             const success = results.some(result => result === 'success');
             if (success) {
-                Logger.info(`[FeedPollJob] Sent auto-disable notification for feed ${feedConfig.id}`);
+                Logger.info(
+                    `[FeedPollJob] Sent auto-disable notification for feed ${feedConfig.id}`
+                );
             } else {
                 Logger.warn(
                     `[FeedPollJob] Failed to send auto-disable notification for feed ${feedConfig.id}: ${JSON.stringify(results)}`
