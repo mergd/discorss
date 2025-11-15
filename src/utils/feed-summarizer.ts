@@ -225,7 +225,7 @@ async function summarizeSingleContent(
             : content;
 
     const languageInstruction = language
-        ? `7. **IMPORTANT: Write the summary entirely in ${language} language. Use the language code "${language}" to determine the target language (e.g., "en" = English, "es" = Spanish, "fr" = French, "de" = German, etc.).**`
+        ? `8. **IMPORTANT: Write the summary entirely in ${language} language. Use the language code "${language}" to determine the target language (e.g., "en" = English, "es" = Spanish, "fr" = French, "de" = German, etc.).**`
         : '';
 
     const prompt = `
@@ -238,6 +238,7 @@ You are an expert summarizer for Discord bot messages. Your task is to create a 
 4.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
 5.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
 6.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 5.
+7.  **IMPORTANT: Generate the summary directly without internal reasoning or thinking. Provide only the final summary text.**
 ${languageInstruction ? languageInstruction + '\n' : ''}
 **Content to Summarize:**
 ${truncatedContent}
@@ -270,7 +271,7 @@ ${truncatedContent}
                     content: prompt,
                 },
             ],
-            max_completion_tokens: 300,
+            max_completion_tokens: 1000,
         };
 
         if (posthog) {
@@ -287,7 +288,9 @@ ${truncatedContent}
 
         const response = await openAIClient.chat.completions.create(requestParams);
 
-        const text = response.choices[0]?.message?.content || '';
+        const choice = response.choices[0];
+        const text = choice?.message?.content || '';
+        const finishReason = choice?.finish_reason;
         const usage = response.usage;
         const inputTokens = usage?.prompt_tokens ?? 0;
         const outputTokens = usage?.completion_tokens ?? 0;
@@ -295,11 +298,13 @@ ${truncatedContent}
 
         const duration = Date.now() - startTime;
         Logger.info(
-            `[Summarizer] Received summary from ${MODEL_NAME} (${duration}ms). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total`
+            `[Summarizer] Received summary from ${MODEL_NAME} (${duration}ms). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total. Finish reason: ${finishReason}`
         );
 
         if (!text || text.trim().length === 0) {
-            Logger.warn(`[Summarizer] Received empty summary from ${MODEL_NAME}.`);
+            Logger.warn(
+                `[Summarizer] Received empty summary from ${MODEL_NAME}. Finish reason: ${finishReason}, Raw content: ${JSON.stringify(choice?.message)}`
+            );
             posthog?.capture({
                 distinctId,
                 event: 'summarization_empty_response',
