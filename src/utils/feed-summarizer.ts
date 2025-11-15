@@ -271,7 +271,6 @@ ${truncatedContent}
                 },
             ],
             max_completion_tokens: 300,
-            temperature: 0.3,
         };
 
         if (posthog) {
