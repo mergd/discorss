@@ -5,6 +5,7 @@ import { Logger } from '../services/logger.js';
 import { posthog } from './analytics.js';
 import { getOpenAIClient } from '../services/openai-service.js';
 import { calculateReadTime } from './read-time.js';
+import { env } from './env.js';
 
 /**
  * Fetches the HTML content of a page, attempts to extract the body,
@@ -258,11 +259,14 @@ ${truncatedContent}
 
         const distinctId = guildId || 'system_summarizer';
 
+        const useOpenRouter = !!env.OPENROUTER_API_KEY;
         const requestParams: ChatCompletionCreateParams & {
             posthogDistinctId?: string;
             posthogTraceId?: string;
             posthogProperties?: Record<string, unknown>;
             posthogPrivacyMode?: boolean;
+            max_tokens?: number;
+            max_completion_tokens?: number;
         } = {
             model: MODEL_NAME,
             messages: [
@@ -271,7 +275,7 @@ ${truncatedContent}
                     content: prompt,
                 },
             ],
-            max_completion_tokens: 1000,
+            ...(useOpenRouter ? { max_tokens: 300 } : { max_completion_tokens: 1000 }),
         };
 
         if (posthog) {

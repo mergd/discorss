@@ -7,19 +7,37 @@ import { env } from '../utils/env.js';
 let openAIClient: OpenAI | PostHogOpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI | PostHogOpenAI | null {
-    if (!env.OPENAI_API_KEY) {
+    const apiKey = env.OPENROUTER_API_KEY || env.OPENAI_API_KEY;
+    if (!apiKey) {
         return null;
     }
 
     if (!openAIClient) {
+        const useOpenRouter = !!env.OPENROUTER_API_KEY;
+        const baseURL = useOpenRouter ? 'https://openrouter.ai/api/v1' : undefined;
+        
         if (posthog) {
             openAIClient = new PostHogOpenAI({
-                apiKey: env.OPENAI_API_KEY,
+                apiKey: apiKey,
                 posthog: posthog,
+                baseURL: baseURL,
+                defaultHeaders: useOpenRouter
+                    ? {
+                          'HTTP-Referer': 'https://github.com/mergd/discorss',
+                          'X-Title': 'Discorss Bot',
+                      }
+                    : undefined,
             });
         } else {
             openAIClient = new OpenAI({
-                apiKey: env.OPENAI_API_KEY,
+                apiKey: apiKey,
+                baseURL: baseURL,
+                defaultHeaders: useOpenRouter
+                    ? {
+                          'HTTP-Referer': 'https://github.com/mergd/discorss',
+                          'X-Title': 'Discorss Bot',
+                      }
+                    : undefined,
             });
         }
     }

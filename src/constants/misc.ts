@@ -9,5 +9,5 @@ export const FAILURE_QUIET_PERIOD_HOURS = 24; // Quiet period after threshold is
 export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 15; // Increased from 5 for more aggressive initial backoff
 export const MAX_MINUTES = 1440; // Increased from 360 (6 hours) to 24 hours max
-export const MODEL_NAME = 'gpt-5-nano-2025-08-07';
+export const MODEL_NAME = 'google/gemini-2.0-flash-lite-001';
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5; // When one feed in category fails, apply 50% of its backoff to others
