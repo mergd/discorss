@@ -91,6 +91,7 @@ export class FeedPollJob extends Job {
 
     private manager: ShardingManager;
     private isInitialized: boolean = false;
+    private isProcessingBatch: boolean = false;
 
     constructor(manager: ShardingManager) {
         super();
@@ -187,99 +188,111 @@ export class FeedPollJob extends Job {
         let cycleCount = 0;
 
         batchProcessorInterval = setInterval(async () => {
-            const now = Date.now();
-            const feedsToCheck: string[] = [];
-
-            // Find feeds that are due for checking
-            for (const [feedId, queueItem] of feedQueue) {
-                if (queueItem.nextCheck <= now) {
-                    feedsToCheck.push(feedId);
-                }
+            if (this.isProcessingBatch) {
+                Logger.warn('[FeedPollJob] Batch processor still running, skipping interval');
+                return;
             }
+            this.isProcessingBatch = true;
 
-            if (feedsToCheck.length === 0) {
-                return; // Nothing to check
-            }
+            try {
+                const now = Date.now();
+                const feedsToCheck: string[] = [];
 
-            Logger.info(`[FeedPollJob] Batch checking ${feedsToCheck.length} feeds`);
-
-            // Track memory before batch processing
-            const memBefore = process.memoryUsage();
-
-            // Process feeds in batches to avoid overwhelming the system
-            const batches = [];
-            for (let i = 0; i < feedsToCheck.length; i += MAX_CONCURRENT_FEEDS) {
-                batches.push(feedsToCheck.slice(i, i + MAX_CONCURRENT_FEEDS));
-            }
-
-            for (const batch of batches) {
-                const promises = batch.map(feedId => this.processFeedInQueue(feedId));
-                await Promise.allSettled(promises);
-
-                // Clear promises array to help GC
-                promises.length = 0;
-
-                // Small delay between batches to prevent overwhelming
-                if (batches.length > 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-
-            // Clear batches array
-            batches.length = 0;
-
-            // Track memory after batch processing
-            const memAfter = process.memoryUsage();
-            const heapDelta = (memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024;
-
-            if (heapDelta > 10) {
-                Logger.warn(
-                    `[FeedPollJob] High memory delta after batch: ${heapDelta.toFixed(2)}MB`
-                );
-            }
-
-            // Periodic memory monitoring and garbage collection
-            cycleCount++;
-            if (cycleCount % 10 === 0) {
-                // Every 10 cycles (5 minutes)
-                const memUsage = process.memoryUsage();
-                Logger.info(
-                    `[FeedPollJob] Memory usage - RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
-                );
-
-                // Force garbage collection if available
-                if (global.gc) {
-                    global.gc();
-                    Logger.info('[FeedPollJob] Forced garbage collection');
+                // Find feeds that are due for checking
+                for (const [feedId, queueItem] of feedQueue) {
+                    if (queueItem.nextCheck <= now) {
+                        feedsToCheck.push(feedId);
+                    }
                 }
 
-                // Log feed queue stats
-                Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
+                if (feedsToCheck.length === 0) {
+                    return; // Nothing to check
+                }
 
-                // Check for queue size overflow
-                if (feedQueue.size > MAX_QUEUE_SIZE) {
-                    Logger.error(
-                        `[FeedPollJob] ⚠️  Feed queue size exceeded limit! Size: ${feedQueue.size}, Limit: ${MAX_QUEUE_SIZE}`
+                Logger.info(`[FeedPollJob] Batch checking ${feedsToCheck.length} feeds`);
+
+                // Track memory before batch processing
+                const memBefore = process.memoryUsage();
+
+                // Process feeds in batches to avoid overwhelming the system
+                const batches = [];
+                for (let i = 0; i < feedsToCheck.length; i += MAX_CONCURRENT_FEEDS) {
+                    batches.push(feedsToCheck.slice(i, i + MAX_CONCURRENT_FEEDS));
+                }
+
+                for (const batch of batches) {
+                    const promises = batch.map(feedId => this.processFeedInQueue(feedId));
+                    await Promise.allSettled(promises);
+
+                    // Clear promises array to help GC
+                    promises.length = 0;
+
+                    // Small delay between batches to prevent overwhelming
+                    if (batches.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+
+                // Clear batches array
+                batches.length = 0;
+
+                // Track memory after batch processing
+                const memAfter = process.memoryUsage();
+                const heapDelta = (memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024;
+
+                if (heapDelta > 10) {
+                    Logger.warn(
+                        `[FeedPollJob] High memory delta after batch: ${heapDelta.toFixed(2)}MB`
                     );
                 }
-            }
 
-            // Periodic cleanup of stale feeds (every 20 cycles = 10 minutes)
-            if (cycleCount % 20 === 0) {
-                let staleCount = 0;
-                for (const [feedId, queueItem] of feedQueue) {
-                    const timeSinceCheck = now - queueItem.nextCheck;
-                    if (timeSinceCheck > STALE_FEED_THRESHOLD) {
-                        feedQueue.delete(feedId);
-                        staleCount++;
-                        Logger.info(
-                            `[FeedPollJob] Removed stale feed ${feedId} from queue (no check in 7 days)`
+                // Periodic memory monitoring and garbage collection
+                cycleCount++;
+                if (cycleCount % 10 === 0) {
+                    // Every 10 cycles (5 minutes)
+                    const memUsage = process.memoryUsage();
+                    Logger.info(
+                        `[FeedPollJob] Memory usage - RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+                    );
+
+                    // Force garbage collection if available
+                    if (global.gc) {
+                        global.gc();
+                        Logger.info('[FeedPollJob] Forced garbage collection');
+                    }
+
+                    // Log feed queue stats
+                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
+
+                    // Check for queue size overflow
+                    if (feedQueue.size > MAX_QUEUE_SIZE) {
+                        Logger.error(
+                            `[FeedPollJob] ⚠️  Feed queue size exceeded limit! Size: ${feedQueue.size}, Limit: ${MAX_QUEUE_SIZE}`
                         );
                     }
                 }
-                if (staleCount > 0) {
-                    Logger.info(`[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`);
+
+                // Periodic cleanup of stale feeds (every 20 cycles = 10 minutes)
+                if (cycleCount % 20 === 0) {
+                    let staleCount = 0;
+                    for (const [feedId, queueItem] of feedQueue) {
+                        const timeSinceCheck = now - queueItem.nextCheck;
+                        if (timeSinceCheck > STALE_FEED_THRESHOLD) {
+                            feedQueue.delete(feedId);
+                            staleCount++;
+                            Logger.info(
+                                `[FeedPollJob] Removed stale feed ${feedId} from queue (no check in 7 days)`
+                            );
+                        }
+                    }
+                    if (staleCount > 0) {
+                        Logger.info(`[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`);
+                    }
                 }
+            } catch (error) {
+                Logger.error('[FeedPollJob] Error in batch processor:', error);
+            } finally {
+                this.isProcessingBatch = false;
             }
         }, BATCH_CHECK_INTERVAL);
 
