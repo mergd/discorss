@@ -6,6 +6,9 @@ import pino from 'pino';
 const require = createRequire(import.meta.url);
 let Config = require('../../config/config.json');
 
+// Disable pino-pretty in production to save memory
+const usePrettyLogging = Config.logging.pretty && process.env.NODE_ENV !== 'production';
+
 let logger = pino(
     {
         formatters: {
@@ -14,7 +17,7 @@ let logger = pino(
             },
         },
     },
-    Config.logging.pretty
+    usePrettyLogging
         ? pino.transport({
               target: 'pino-pretty',
               options: {

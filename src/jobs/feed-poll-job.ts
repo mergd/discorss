@@ -31,7 +31,7 @@ import {
 import { Logger } from '../services/index.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
-import { getRSSParser } from '../utils/rss-parser.js';
+import { getRSSParser, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
 interface ParsedFeedItem {
@@ -251,18 +251,35 @@ export class FeedPollJob extends Job {
                 if (cycleCount % 10 === 0) {
                     // Every 10 cycles (5 minutes)
                     const memUsage = process.memoryUsage();
+                    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+                    const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+                    const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+                    
                     Logger.info(
-                        `[FeedPollJob] Memory usage - RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+                        `[FeedPollJob] Memory - RSS: ${rssMB}MB, Heap: ${heapUsedMB}/${heapTotalMB}MB (${Math.round(memUsage.heapUsed / memUsage.heapTotal * 100)}%)`
                     );
 
-                    // Force garbage collection if available
-                    if (global.gc) {
-                        global.gc();
-                        Logger.info('[FeedPollJob] Forced garbage collection');
+                    // Warning thresholds
+                    const HEAP_WARNING_MB = 400;
+                    const RSS_WARNING_MB = 500;
+                    
+                    if (heapUsedMB > HEAP_WARNING_MB || rssMB > RSS_WARNING_MB) {
+                        Logger.warn(
+                            `[FeedPollJob] ⚠️ High memory usage detected! Heap: ${heapUsedMB}MB, RSS: ${rssMB}MB`
+                        );
+                        
+                        // Force garbage collection if available
+                        if (global.gc) {
+                            global.gc();
+                            const afterGC = process.memoryUsage();
+                            Logger.info(
+                                `[FeedPollJob] Forced GC - Heap now: ${Math.round(afterGC.heapUsed / 1024 / 1024)}MB (freed ${heapUsedMB - Math.round(afterGC.heapUsed / 1024 / 1024)}MB)`
+                            );
+                        }
                     }
 
                     // Log feed queue stats
-                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
+                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}, Category frequencies: ${categoryFrequencies.size}`);
 
                     // Check for queue size overflow
                     if (feedQueue.size > MAX_QUEUE_SIZE) {
@@ -288,6 +305,19 @@ export class FeedPollJob extends Job {
                     if (staleCount > 0) {
                         Logger.info(`[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`);
                     }
+                }
+
+                // Periodic maintenance (every 120 cycles = ~1 hour)
+                if (cycleCount % 120 === 0) {
+                    // Clean up old feed_failures records (older than 7 days)
+                    const deletedFailures = await FeedStorageService.cleanupOldFailures(7);
+                    if (deletedFailures > 0) {
+                        Logger.info(`[FeedPollJob] Cleaned up ${deletedFailures} old failure records`);
+                    }
+
+                    // Reset RSS parser to clear accumulated state
+                    resetRSSParser();
+                    Logger.info('[FeedPollJob] Reset RSS parser to free memory');
                 }
             } catch (error) {
                 Logger.error('[FeedPollJob] Error in batch processor:', error);

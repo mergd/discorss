@@ -17,8 +17,34 @@ export class Api {
     constructor(public controllers: Controller[]) {
         this.app = express();
         this.app.use(express.json());
+        this.setupHealthcheck();
         this.setupControllers();
         this.app.use(handleError());
+    }
+
+    private setupHealthcheck(): void {
+        // Health endpoint for Railway healthchecks
+        // Returns unhealthy (503) if memory usage exceeds threshold
+        this.app.get('/health', (_req, res) => {
+            const memUsage = process.memoryUsage();
+            const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+            const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+            
+            const MEMORY_THRESHOLD_MB = 450; // Return unhealthy above this
+            const isHealthy = rssMB < MEMORY_THRESHOLD_MB;
+            
+            const status = {
+                status: isHealthy ? 'healthy' : 'unhealthy',
+                memory: {
+                    rss: `${rssMB}MB`,
+                    heap: `${heapUsedMB}MB`,
+                    threshold: `${MEMORY_THRESHOLD_MB}MB`,
+                },
+                uptime: Math.round(process.uptime()),
+            };
+            
+            res.status(isHealthy ? 200 : 503).json(status);
+        });
     }
 
     public async start(): Promise<void> {

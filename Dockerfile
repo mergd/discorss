@@ -43,12 +43,14 @@ COPY lang ./lang
 # Copy drizzle config needed for migrations
 COPY src/drizzle.config.ts ./src/drizzle.config.ts
 COPY drizzle/migrations ./drizzle/migrations
-# Copy cron restart script (if using same image for cron service)
-COPY cron-restart.js ./
-# Define the command to run migrations, register commands, and then start the app
-# Run migrations first, then register commands, and finally start the app
-CMD ["sh", "-c", "bun run db:migrate && bun --enable-source-maps dist/start-bot.js commands register && bun dist/start-manager.js"]
 
-# Optional: Expose the API port if used (check config/config.json)
-# Default from template might be 3000 or similar
-# EXPOSE 3000
+# Set production environment
+ENV NODE_ENV=production
+
+# Define the command to run migrations, register commands, and then start the app
+# --smol: Bun's memory-optimized mode for lower memory usage
+# Run migrations first, then register commands, and finally start the app
+CMD ["sh", "-c", "bun run db:migrate && bun --enable-source-maps dist/start-bot.js commands register && bun --smol dist/start-manager.js"]
+
+# Expose the API port for healthchecks
+EXPOSE 3001

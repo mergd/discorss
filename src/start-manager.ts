@@ -8,6 +8,7 @@ import { Api } from './models/api.js';
 import { Manager } from './models/manager.js';
 import { HttpService, JobService, Logger, MasterApiService } from './services/index.js';
 import { JobRegistry } from './services/job-registry.js';
+import { shutdownPostHog } from './utils/analytics.js';
 import { env } from './utils/env.js';
 import { MathUtils, ShardUtils } from './utils/index.js';
 
@@ -120,7 +121,10 @@ async function start(): Promise<void> {
                 await managerInstance.stop();
             }
 
-            // Import and close database connection
+            // Shutdown PostHog analytics
+            await shutdownPostHog();
+
+            // Close database connection
             const { closeDb } = await import('./db/index.js');
             await closeDb();
 

@@ -1,5 +1,5 @@
 import { subDays, subHours } from 'date-fns';
-import { and, asc, count, desc, eq, gte, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, lt, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_RECENT_LINKS } from '../constants/index.js';
 import { db } from '../db/index.js';
@@ -1222,6 +1222,27 @@ export class FeedStorageService {
             console.log(`[FeedStorageService] Auto-disabled feed ${feedId}: ${reason}`);
         } catch (error) {
             console.error(`Error auto-disabling feed ${feedId}:`, error);
+        }
+    }
+
+    /**
+     * Cleans up old feed failure records to prevent table bloat.
+     * Deletes records older than the specified number of days.
+     * @param olderThanDays Delete records older than this many days (default: 7)
+     * @returns Number of deleted records
+     */
+    public static async cleanupOldFailures(olderThanDays: number = 7): Promise<number> {
+        try {
+            const cutoffDate = subDays(new Date(), olderThanDays);
+            const result = await (db as any)
+                .delete(feedFailures)
+                .where(lt(feedFailures.timestamp, cutoffDate))
+                .returning({ deletedId: feedFailures.id });
+            
+            return result.length;
+        } catch (error) {
+            console.error(`Error cleaning up old feed failures:`, error);
+            return 0;
         }
     }
 }

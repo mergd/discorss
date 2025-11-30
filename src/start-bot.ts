@@ -1,6 +1,7 @@
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
 import { createRequire } from 'node:module';
+import { shutdownPostHog } from './utils/analytics.js';
 import { env } from './utils/env.js';
 
 import { Button } from './buttons/index.js';
@@ -143,7 +144,10 @@ async function start(): Promise<void> {
         try {
             await botInstance.stop();
             
-            // Reset RSS parser if used
+            // Shutdown PostHog analytics
+            await shutdownPostHog();
+            
+            // Reset RSS parser
             const { resetRSSParser } = await import('./utils/rss-parser.js');
             resetRSSParser();
             
