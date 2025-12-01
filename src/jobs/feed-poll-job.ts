@@ -29,6 +29,7 @@ import {
     FeedStorageService,
 } from '../services/feed-storage-service.js';
 import { Logger } from '../services/index.js';
+import { resetOpenAIClient } from '../services/openai-service.js';
 import { posthog } from '../utils/analytics.js';
 import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
 import { getRSSParser, resetRSSParser } from '../utils/rss-parser.js';
@@ -256,30 +257,40 @@ export class FeedPollJob extends Job {
                     const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
                     
                     Logger.info(
-                        `[FeedPollJob] Memory - RSS: ${rssMB}MB, Heap: ${heapUsedMB}/${heapTotalMB}MB (${Math.round(memUsage.heapUsed / memUsage.heapTotal * 100)}%)`
+                        `[FeedPollJob] Memory - RSS: ${rssMB}MB, Heap: ${heapUsedMB}/${heapTotalMB}MB`
                     );
 
-                    // Warning thresholds
-                    const HEAP_WARNING_MB = 400;
-                    const RSS_WARNING_MB = 500;
-                    
-                    if (heapUsedMB > HEAP_WARNING_MB || rssMB > RSS_WARNING_MB) {
-                        Logger.warn(
-                            `[FeedPollJob] ⚠️ High memory usage detected! Heap: ${heapUsedMB}MB, RSS: ${rssMB}MB`
+                    // Critical threshold - exit to let Railway restart us
+                    const RSS_CRITICAL_MB = 420;
+                    if (rssMB > RSS_CRITICAL_MB) {
+                        Logger.error(
+                            `[FeedPollJob] 🚨 CRITICAL: RSS ${rssMB}MB exceeds ${RSS_CRITICAL_MB}MB! Exiting for restart...`
                         );
+                        process.exit(1);
+                    }
+
+                    // Warning threshold - try GC
+                    const RSS_WARNING_MB = 350;
+                    if (rssMB > RSS_WARNING_MB) {
+                        Logger.warn(
+                            `[FeedPollJob] ⚠️ High memory: RSS ${rssMB}MB. Forcing cleanup...`
+                        );
+                        
+                        // Reset RSS parser to free any accumulated state
+                        resetRSSParser();
                         
                         // Force garbage collection if available
                         if (global.gc) {
                             global.gc();
                             const afterGC = process.memoryUsage();
                             Logger.info(
-                                `[FeedPollJob] Forced GC - Heap now: ${Math.round(afterGC.heapUsed / 1024 / 1024)}MB (freed ${heapUsedMB - Math.round(afterGC.heapUsed / 1024 / 1024)}MB)`
+                                `[FeedPollJob] After cleanup - RSS: ${Math.round(afterGC.rss / 1024 / 1024)}MB`
                             );
                         }
                     }
 
                     // Log feed queue stats
-                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}, Category frequencies: ${categoryFrequencies.size}`);
+                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
 
                     // Check for queue size overflow
                     if (feedQueue.size > MAX_QUEUE_SIZE) {
@@ -315,9 +326,10 @@ export class FeedPollJob extends Job {
                         Logger.info(`[FeedPollJob] Cleaned up ${deletedFailures} old failure records`);
                     }
 
-                    // Reset RSS parser to clear accumulated state
+                    // Reset singletons to clear accumulated state
                     resetRSSParser();
-                    Logger.info('[FeedPollJob] Reset RSS parser to free memory');
+                    resetOpenAIClient();
+                    Logger.info('[FeedPollJob] Reset RSS parser and OpenAI client to free memory');
                 }
             } catch (error) {
                 Logger.error('[FeedPollJob] Error in batch processor:', error);

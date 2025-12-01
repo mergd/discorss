@@ -6,6 +6,10 @@ import { env } from '../utils/env.js';
 
 let openAIClient: OpenAI | PostHogOpenAI | null = null;
 
+export function resetOpenAIClient(): void {
+    openAIClient = null;
+}
+
 export function getOpenAIClient(): OpenAI | PostHogOpenAI | null {
     const apiKey = env.OPENROUTER_API_KEY || env.OPENAI_API_KEY;
     if (!apiKey) {
