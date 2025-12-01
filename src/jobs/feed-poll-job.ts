@@ -494,6 +494,13 @@ export class FeedPollJob extends Job {
                 // --- End Link Deduplication Check ---
 
                 newItems.push(item); // Add to new items if passes checks
+                
+                // Limit items per batch to prevent memory spikes
+                const MAX_ITEMS_PER_FEED = 5;
+                if (newItems.length >= MAX_ITEMS_PER_FEED) {
+                    Logger.info(`[FeedPollJob] Limiting to ${MAX_ITEMS_PER_FEED} items for feed ${feedConfig.id} (had more available)`);
+                    break;
+                }
             }
 
             // Update the last known GUID in the database if it changed
