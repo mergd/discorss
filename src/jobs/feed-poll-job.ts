@@ -255,7 +255,7 @@ export class FeedPollJob extends Job {
                     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
                     const rssMB = Math.round(memUsage.rss / 1024 / 1024);
                     const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
-                    
+
                     Logger.info(
                         `[FeedPollJob] Memory - RSS: ${rssMB}MB, Heap: ${heapUsedMB}/${heapTotalMB}MB`
                     );
@@ -275,10 +275,10 @@ export class FeedPollJob extends Job {
                         Logger.warn(
                             `[FeedPollJob] ⚠️ High memory: RSS ${rssMB}MB. Forcing cleanup...`
                         );
-                        
+
                         // Reset RSS parser to free any accumulated state
                         resetRSSParser();
-                        
+
                         // Force garbage collection if available
                         if (global.gc) {
                             global.gc();
@@ -314,7 +314,9 @@ export class FeedPollJob extends Job {
                         }
                     }
                     if (staleCount > 0) {
-                        Logger.info(`[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`);
+                        Logger.info(
+                            `[FeedPollJob] Cleaned up ${staleCount} stale feeds from queue`
+                        );
                     }
                 }
 
@@ -323,7 +325,9 @@ export class FeedPollJob extends Job {
                     // Clean up old feed_failures records (older than 7 days)
                     const deletedFailures = await FeedStorageService.cleanupOldFailures(7);
                     if (deletedFailures > 0) {
-                        Logger.info(`[FeedPollJob] Cleaned up ${deletedFailures} old failure records`);
+                        Logger.info(
+                            `[FeedPollJob] Cleaned up ${deletedFailures} old failure records`
+                        );
                     }
 
                     // Reset singletons to clear accumulated state
@@ -506,11 +510,13 @@ export class FeedPollJob extends Job {
                 // --- End Link Deduplication Check ---
 
                 newItems.push(item); // Add to new items if passes checks
-                
+
                 // Limit items per batch to prevent memory spikes
                 const MAX_ITEMS_PER_FEED = 5;
                 if (newItems.length >= MAX_ITEMS_PER_FEED) {
-                    Logger.info(`[FeedPollJob] Limiting to ${MAX_ITEMS_PER_FEED} items for feed ${feedConfig.id} (had more available)`);
+                    Logger.info(
+                        `[FeedPollJob] Limiting to ${MAX_ITEMS_PER_FEED} items for feed ${feedConfig.id} (had more available)`
+                    );
                     break;
                 }
             }

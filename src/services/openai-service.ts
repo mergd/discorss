@@ -19,7 +19,7 @@ export function getOpenAIClient(): OpenAI | PostHogOpenAI | null {
     if (!openAIClient) {
         const useOpenRouter = !!env.OPENROUTER_API_KEY;
         const baseURL = useOpenRouter ? 'https://openrouter.ai/api/v1' : undefined;
-        
+
         if (posthog) {
             openAIClient = new PostHogOpenAI({
                 apiKey: apiKey,
@@ -48,4 +48,3 @@ export function getOpenAIClient(): OpenAI | PostHogOpenAI | null {
 
     return openAIClient;
 }
-
