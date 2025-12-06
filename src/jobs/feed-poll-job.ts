@@ -239,58 +239,42 @@ export class FeedPollJob extends Job {
 
                 // Track memory after batch processing
                 const memAfter = process.memoryUsage();
+                const rssMB = Math.round(memAfter.rss / 1024 / 1024);
+                
+                // CRITICAL: Check memory on EVERY batch, not just every 10 cycles
+                const RSS_CRITICAL_MB = 420;
+                if (rssMB > RSS_CRITICAL_MB) {
+                    Logger.error(
+                        `[FeedPollJob] 🚨 CRITICAL: RSS ${rssMB}MB exceeds ${RSS_CRITICAL_MB}MB! Exiting for restart...`
+                    );
+                    process.exit(1);
+                }
+                
                 const heapDelta = (memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024;
-
                 if (heapDelta > 10) {
                     Logger.warn(
-                        `[FeedPollJob] High memory delta after batch: ${heapDelta.toFixed(2)}MB`
+                        `[FeedPollJob] High memory delta after batch: ${heapDelta.toFixed(2)}MB (RSS: ${rssMB}MB)`
                     );
                 }
 
-                // Periodic memory monitoring and garbage collection
+                // Periodic memory logging (every 10 cycles = 5 minutes)
                 cycleCount++;
                 if (cycleCount % 10 === 0) {
-                    // Every 10 cycles (5 minutes)
                     const memUsage = process.memoryUsage();
                     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-                    const rssMB = Math.round(memUsage.rss / 1024 / 1024);
-                    const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
-
+                    const currentRssMB = Math.round(memUsage.rss / 1024 / 1024);
+                    
                     Logger.info(
-                        `[FeedPollJob] Memory - RSS: ${rssMB}MB, Heap: ${heapUsedMB}/${heapTotalMB}MB`
+                        `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}`
                     );
 
-                    // Critical threshold - exit to let Railway restart us
-                    const RSS_CRITICAL_MB = 420;
-                    if (rssMB > RSS_CRITICAL_MB) {
-                        Logger.error(
-                            `[FeedPollJob] 🚨 CRITICAL: RSS ${rssMB}MB exceeds ${RSS_CRITICAL_MB}MB! Exiting for restart...`
-                        );
-                        process.exit(1);
-                    }
-
-                    // Warning threshold - try GC
-                    const RSS_WARNING_MB = 350;
-                    if (rssMB > RSS_WARNING_MB) {
-                        Logger.warn(
-                            `[FeedPollJob] ⚠️ High memory: RSS ${rssMB}MB. Forcing cleanup...`
-                        );
-
-                        // Reset RSS parser to free any accumulated state
+                    // Warning threshold - try cleanup at 350MB
+                    if (currentRssMB > 350) {
+                        Logger.warn(`[FeedPollJob] ⚠️ High memory: RSS ${currentRssMB}MB. Forcing cleanup...`);
                         resetRSSParser();
-
-                        // Force garbage collection if available
-                        if (global.gc) {
-                            global.gc();
-                            const afterGC = process.memoryUsage();
-                            Logger.info(
-                                `[FeedPollJob] After cleanup - RSS: ${Math.round(afterGC.rss / 1024 / 1024)}MB`
-                            );
-                        }
+                        resetOpenAIClient();
+                        if (global.gc) global.gc();
                     }
-
-                    // Log feed queue stats
-                    Logger.info(`[FeedPollJob] Feed queue size: ${feedQueue.size}`);
 
                     // Check for queue size overflow
                     if (feedQueue.size > MAX_QUEUE_SIZE) {
