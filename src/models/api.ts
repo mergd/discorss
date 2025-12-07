@@ -30,7 +30,7 @@ export class Api {
             const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
             const rssMB = Math.round(memUsage.rss / 1024 / 1024);
             
-            const MEMORY_THRESHOLD_MB = 350; // Return unhealthy above this - more aggressive to prevent OOM
+            const MEMORY_THRESHOLD_MB = 300; // Return unhealthy above this - leave headroom for 100MB spikes
             const isHealthy = rssMB < MEMORY_THRESHOLD_MB;
             
             const status = {

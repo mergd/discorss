@@ -240,16 +240,16 @@ export class FeedPollJob extends Job {
                 // Track memory after batch processing
                 const memAfter = process.memoryUsage();
                 const rssMB = Math.round(memAfter.rss / 1024 / 1024);
-                
-                // CRITICAL: Check memory on EVERY batch, not just every 10 cycles
-                const RSS_CRITICAL_MB = 420;
+
+                // CRITICAL: Check memory on EVERY batch - lower threshold to leave room for spikes
+                const RSS_CRITICAL_MB = 350;
                 if (rssMB > RSS_CRITICAL_MB) {
                     Logger.error(
                         `[FeedPollJob] 🚨 CRITICAL: RSS ${rssMB}MB exceeds ${RSS_CRITICAL_MB}MB! Exiting for restart...`
                     );
                     process.exit(1);
                 }
-                
+
                 const heapDelta = (memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024;
                 if (heapDelta > 10) {
                     Logger.warn(
@@ -263,13 +263,13 @@ export class FeedPollJob extends Job {
                     const memUsage = process.memoryUsage();
                     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
                     const currentRssMB = Math.round(memUsage.rss / 1024 / 1024);
-                    
+
                     Logger.info(
                         `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}`
                     );
 
-                    // Warning threshold - try cleanup at 350MB
-                    if (currentRssMB > 350) {
+                    // Warning threshold - try cleanup at 280MB
+                    if (currentRssMB > 280) {
                         Logger.warn(`[FeedPollJob] ⚠️ High memory: RSS ${currentRssMB}MB. Forcing cleanup...`);
                         resetRSSParser();
                         resetOpenAIClient();
@@ -691,16 +691,19 @@ export class FeedPollJob extends Job {
                     item.articleSummary = null;
                 } else {
                     try {
+                        // Check memory before heavy operations - exit early if too high
+                        const preOpMem = Math.round(process.memoryUsage().rss / 1024 / 1024);
+                        if (preOpMem > 320) {
+                            Logger.error(`[FeedPollJob] 🚨 RSS ${preOpMem}MB too high before fetch, exiting...`);
+                            process.exit(1);
+                        }
+
                         // 1. Try fetching main article content
                         if (item.link) {
-                            // Prioritize 'content:encoded' or 'content' if present and seemingly substantial
                             const feedItemContent = item['content:encoded'] || item.content;
                             if (feedItemContent && feedItemContent.length > 200) {
-                                // Heuristic: content exists
                                 articleContent = feedItemContent;
-                                Logger.info(
-                                    `[FeedPollJob] Using feed item content for: ${item.link}`
-                                );
+                                Logger.info(`[FeedPollJob] Using feed item content for: ${item.link}`);
                             } else {
                                 articleContent = await fetchPageContent(item.link);
                             }
