@@ -7,7 +7,7 @@ import { getOpenAIClient } from '../services/openai-service.js';
 import { calculateReadTime } from './read-time.js';
 import { env } from './env.js';
 
-const SUMMARY_LIMIT_PER_24H = 50;
+const SUMMARY_LIMIT_PER_24H = 100;
 const SUMMARY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const guildSummaryUsage: Map<string, number[]> = new Map();
 
