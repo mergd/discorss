@@ -31,7 +31,7 @@ import {
 import { Logger } from '../services/index.js';
 import { resetOpenAIClient } from '../services/openai-service.js';
 import { posthog } from '../utils/analytics.js';
-import { fetchPageContent, summarizeContent } from '../utils/feed-summarizer.js';
+import { fetchPageContent, summarizeContent, cleanupStaleSummaryUsage, getSummaryUsageMapSize } from '../utils/feed-summarizer.js';
 import { getRSSParser, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
@@ -263,16 +263,20 @@ export class FeedPollJob extends Job {
                     const memUsage = process.memoryUsage();
                     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
                     const currentRssMB = Math.round(memUsage.rss / 1024 / 1024);
+                    const summaryMapSize = getSummaryUsageMapSize();
 
                     Logger.info(
-                        `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}`
+                        `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}, SummaryMap: ${summaryMapSize}`
                     );
 
                     // Warning threshold - try cleanup at 280MB
                     if (currentRssMB > 280) {
-                        Logger.warn(`[FeedPollJob] ⚠️ High memory: RSS ${currentRssMB}MB. Forcing cleanup...`);
+                        Logger.warn(
+                            `[FeedPollJob] ⚠️ High memory: RSS ${currentRssMB}MB. Forcing cleanup...`
+                        );
                         resetRSSParser();
                         resetOpenAIClient();
+                        cleanupStaleSummaryUsage();
                         if (global.gc) global.gc();
                     }
 
@@ -311,6 +315,14 @@ export class FeedPollJob extends Job {
                     if (deletedFailures > 0) {
                         Logger.info(
                             `[FeedPollJob] Cleaned up ${deletedFailures} old failure records`
+                        );
+                    }
+
+                    // Clean up stale guild summary usage entries to prevent memory leaks
+                    const removedGuilds = cleanupStaleSummaryUsage();
+                    if (removedGuilds > 0) {
+                        Logger.info(
+                            `[FeedPollJob] Cleaned up ${removedGuilds} stale guild summary usage entries`
                         );
                     }
 
@@ -694,7 +706,9 @@ export class FeedPollJob extends Job {
                         // Check memory before heavy operations - exit early if too high
                         const preOpMem = Math.round(process.memoryUsage().rss / 1024 / 1024);
                         if (preOpMem > 320) {
-                            Logger.error(`[FeedPollJob] 🚨 RSS ${preOpMem}MB too high before fetch, exiting...`);
+                            Logger.error(
+                                `[FeedPollJob] 🚨 RSS ${preOpMem}MB too high before fetch, exiting...`
+                            );
                             process.exit(1);
                         }
 
@@ -703,7 +717,9 @@ export class FeedPollJob extends Job {
                             const feedItemContent = item['content:encoded'] || item.content;
                             if (feedItemContent && feedItemContent.length > 200) {
                                 articleContent = feedItemContent;
-                                Logger.info(`[FeedPollJob] Using feed item content for: ${item.link}`);
+                                Logger.info(
+                                    `[FeedPollJob] Using feed item content for: ${item.link}`
+                                );
                             } else {
                                 articleContent = await fetchPageContent(item.link);
                             }
@@ -1089,11 +1105,13 @@ export class FeedPollJob extends Job {
                 );
             }
 
+            // Capture count before clearing for success/failure logic
+            const allItemsAttempted = itemsToSend.length;
+
             // Clear items arrays to help GC
             itemsToSend.length = 0;
 
             // Determine overall success and handle failures/notifications
-            const allItemsAttempted = itemsToSend.length; // Use itemsToSend length
             const allSucceeded =
                 totalSuccessfullySentItems === allItemsAttempted &&
                 !firstPermissionError &&
@@ -1381,6 +1399,30 @@ export class FeedPollJob extends Job {
             feedConfig.category === 'YouTube';
         if (isYouTubeFeed) {
             Logger.info(`[FeedPollJob] Skipping error message for YouTube feed ${feedConfig.id}`);
+            return;
+        }
+
+        // Skip transient errors (503, timeouts, network issues, XML parse errors) - these resolve themselves
+        const errorMsg = error?.message?.toLowerCase() || '';
+        const isTransientError =
+            errorMsg.includes('503') ||
+            errorMsg.includes('502') ||
+            errorMsg.includes('504') ||
+            errorMsg.includes('timeout') ||
+            errorMsg.includes('timed out') ||
+            errorMsg.includes('econnreset') ||
+            errorMsg.includes('econnrefused') ||
+            errorMsg.includes('enotfound') ||
+            errorMsg.includes('socket hang up') ||
+            errorMsg.includes('network') ||
+            errorMsg.includes('temporarily unavailable') ||
+            errorMsg.includes('invalid character') || // XML parse error from server error pages
+            errorMsg.includes('unexpected close tag') || // XML parse error
+            errorMsg.includes('non-whitespace before first tag'); // Server returned non-XML
+        if (isTransientError) {
+            Logger.info(
+                `[FeedPollJob] Skipping error message for transient error on feed ${feedConfig.id}: ${error?.message}`
+            );
             return;
         }
 

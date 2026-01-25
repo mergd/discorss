@@ -11,6 +11,39 @@ const SUMMARY_LIMIT_PER_24H = 50;
 const SUMMARY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const guildSummaryUsage: Map<string, number[]> = new Map();
 
+/**
+ * Cleans up stale guild entries from the summary usage map.
+ * Removes guilds that haven't made any summarization calls in the last 24 hours.
+ * Call this periodically to prevent memory leaks.
+ */
+export function cleanupStaleSummaryUsage(): number {
+    const now = Date.now();
+    let removedCount = 0;
+
+    for (const [guildId, timestamps] of guildSummaryUsage) {
+        // Filter to only recent timestamps
+        const recentTimestamps = timestamps.filter(ts => now - ts <= SUMMARY_WINDOW_MS);
+
+        if (recentTimestamps.length === 0) {
+            // No recent activity - remove the guild entirely
+            guildSummaryUsage.delete(guildId);
+            removedCount++;
+        } else if (recentTimestamps.length !== timestamps.length) {
+            // Update with cleaned timestamps
+            guildSummaryUsage.set(guildId, recentTimestamps);
+        }
+    }
+
+    return removedCount;
+}
+
+/**
+ * Gets the current size of the guild summary usage map (for monitoring).
+ */
+export function getSummaryUsageMapSize(): number {
+    return guildSummaryUsage.size;
+}
+
 type GuildSummaryConsumptionResult = {
     allowed: boolean;
     resetInMs?: number;
