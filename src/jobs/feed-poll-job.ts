@@ -31,7 +31,12 @@ import {
 import { Logger } from '../services/index.js';
 import { resetOpenAIClient } from '../services/openai-service.js';
 import { posthog } from '../utils/analytics.js';
-import { fetchPageContent, summarizeContent, cleanupStaleSummaryUsage, getSummaryUsageMapSize } from '../utils/feed-summarizer.js';
+import {
+    fetchPageContent,
+    summarizeContent,
+    cleanupStaleSummaryUsage,
+    getSummaryUsageMapSize,
+} from '../utils/feed-summarizer.js';
 import { getRSSParser, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
@@ -931,7 +936,11 @@ export class FeedPollJob extends Job {
                                 item.articleSummary &&
                                 !item.articleSummary.startsWith('Could not generate summary:')
                             ) {
-                                contentToSend += `\n\n**Article Summary:**\n${truncate(item.articleSummary, 1500, true)}`;
+                                const readTimeText =
+                                    item.articleReadTime && item.articleReadTime > 0
+                                        ? ` (~${item.articleReadTime} min read)`
+                                        : '';
+                                contentToSend += `\n\n**Article Summary${readTimeText}:**\n${truncate(item.articleSummary, 1500, true)}`;
                             }
                             // Then show Comments Summary if present and not an error
                             if (
