@@ -5,7 +5,6 @@ import {
     EmbedBuilder,
     MessageFlags,
     NewsChannel,
-    ShardingManager,
     TextChannel,
     codeBlock,
 } from 'discord.js';
@@ -59,13 +58,20 @@ interface ParsedFeedItem {
 
 // Replace individual intervals with batch processing
 const categoryFrequencies: Map<string, number> = new Map();
-// Use lightweight FeedPollConfig to reduce memory usage - excludes large summary fields
+// Use lightweight FeedPollConfig to reduce memory usage in the in-memory queue
 const feedQueue: Map<string, { feed: FeedPollConfig; nextCheck: number }> = new Map();
 let batchProcessorInterval: NodeJS.Timeout | null = null;
 
 // Store enum values for context passing
 const GuildTextChannelTypeValue = ChannelType.GuildText; // 0
 const GuildAnnouncementChannelTypeValue = ChannelType.GuildAnnouncement; // 5
+
+type BroadcastEvalTarget = {
+    broadcastEval<Result, Context>(
+        fn: (client: any, context: Context) => Result | Promise<Result>,
+        options: { context: Context }
+    ): Promise<Result[]>;
+};
 
 // Helper function to get effective frequency
 function getEffectiveFrequency(feed: FeedPollConfig): number {
@@ -95,11 +101,11 @@ export class FeedPollJob extends Job {
     public schedule: string = '0 */10 * * * *'; // Run every 10 minutes to reload feeds, not every minute!
     public log: boolean = false; // Disable default interval logging, we log activity manually
 
-    private manager: ShardingManager;
+    private manager: BroadcastEvalTarget;
     private isInitialized: boolean = false;
     private isProcessingBatch: boolean = false;
 
-    constructor(manager: ShardingManager) {
+    constructor(manager: BroadcastEvalTarget) {
         super();
         this.manager = manager;
     }
@@ -164,9 +170,6 @@ export class FeedPollJob extends Job {
         // Add/update feeds in queue
         const now = Date.now();
         for (const feed of allFeeds) {
-            const frequencyMinutes = getEffectiveFrequency(feed);
-            const intervalMillis = frequencyMinutes * 60 * 1000;
-
             // Schedule immediate check for new feeds, or update existing
             const existing = feedQueue.get(feed.id);
             const nextCheck = existing ? existing.nextCheck : now; // Immediate for new feeds

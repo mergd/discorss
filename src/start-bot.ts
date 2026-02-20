@@ -32,9 +32,11 @@ import {
     TriggerHandler,
 } from './events/index.js';
 import { CustomClient } from './extensions/index.js';
-import { Job } from './jobs/index.js';
+import { FeedPollJob, Job } from './jobs/index.js';
+import { Api } from './models/api.js';
 import { Bot } from './models/bot.js';
 import { Reaction } from './reactions/index.js';
+import { JobRegistry } from './services/job-registry.js';
 import {
     CommandRegistrationService,
     EventDataService,
@@ -42,6 +44,7 @@ import {
     Logger,
 } from './services/index.js';
 import { Trigger } from './triggers/index.js';
+import { SingleClientBroadcast } from './utils/single-client-broadcast.js';
 
 const require = createRequire(import.meta.url);
 let Config = require('../config/config.json');
@@ -99,7 +102,10 @@ async function start(): Promise<void> {
     let reactionHandler = new ReactionHandler(reactions, eventDataService);
 
     // Jobs
-    let jobs: Job[] = [];
+    const singleClientBroadcast = new SingleClientBroadcast(client);
+    const feedPollJob = new FeedPollJob(singleClientBroadcast);
+    JobRegistry.getInstance().setFeedPollJob(feedPollJob);
+    let jobs: Job[] = [feedPollJob];
 
     // Bot
     let bot = new Bot(
@@ -133,24 +139,33 @@ async function start(): Promise<void> {
         process.exit();
     }
 
-    await bot.start();
+    // Start lightweight API for health checks
+    const api = new Api([]);
 
-    // Store bot instance for graceful shutdown
+    await bot.start();
+    await api.start();
+
+    // Store instances for graceful shutdown
     let botInstance = bot;
+    let apiInstance = api;
 
     // Graceful shutdown handlers
     const shutdown = async (signal: string) => {
         Logger.info(`[StartBot] Received ${signal}, starting graceful shutdown...`);
         try {
+            if (apiInstance) {
+                await apiInstance.stop();
+            }
+
             await botInstance.stop();
-            
+
             // Shutdown PostHog analytics
             await shutdownPostHog();
-            
+
             // Reset RSS parser
             const { resetRSSParser } = await import('./utils/rss-parser.js');
             resetRSSParser();
-            
+
             await new Promise(resolve => setTimeout(resolve, 1000));
             Logger.info('[StartBot] Graceful shutdown complete.');
             process.exit(0);

@@ -49,8 +49,8 @@ ENV NODE_ENV=production
 
 # Define the command to run migrations, register commands, and then start the app
 # --smol: Bun's memory-optimized mode for lower memory usage
-# Run migrations first, then register commands, and finally start the app
-CMD ["sh", "-c", "bun run db:migrate && bun --enable-source-maps dist/start-bot.js commands register && bun --smol dist/start-manager.js"]
+# Single-process mode avoids ShardingManager process overhead for small bots.
+CMD ["sh", "-c", "bun run db:migrate && bun dist/start-bot.js commands register && bun --smol dist/start-bot.js"]
 
 # Expose the API port for healthchecks
 EXPOSE 3001
