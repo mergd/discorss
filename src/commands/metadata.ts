@@ -54,6 +54,13 @@ export const ChatCommandMetadata: {
             },
         ],
     },
+    SERVERS: {
+        type: ApplicationCommandType.ChatInput,
+        name: 'servers',
+        description: 'Show how many servers have this bot installed',
+        dm_permission: true,
+        default_member_permissions: undefined,
+    },
     FEEDBACK: {
         type: ApplicationCommandType.ChatInput,
         name: 'feedback',

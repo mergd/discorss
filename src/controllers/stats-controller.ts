@@ -45,6 +45,10 @@ export class StatsController implements Controller {
     public path = '/stats';
     public router: Router = router();
     public authToken: string = Config.api.secret;
+    private readonly cacheTtlMs = 15 * 60 * 1000;
+    private readonly cacheControlHeader = 'private, max-age=900, stale-while-revalidate=3600';
+    private statsCache: { data: AppStats; expiresAt: number } | null = null;
+    private statsInFlight: Promise<AppStats> | null = null;
 
     constructor(private shardManager: ShardingManager) {}
 
@@ -55,24 +59,52 @@ export class StatsController implements Controller {
     }
 
     private async getStats(req: Request, res: Response): Promise<void> {
-        const stats = await this.gatherStats();
+        const stats = await this.getCachedStats();
+        res.setHeader('Cache-Control', this.cacheControlHeader);
         res.status(200).json(stats);
     }
 
     private async getStatsText(req: Request, res: Response): Promise<void> {
-        const stats = await this.gatherStats();
+        const stats = await this.getCachedStats();
         const textOutput = this.formatStatsAsText(stats);
-        
+
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', this.cacheControlHeader);
         res.status(200).send(textOutput);
     }
 
     private async getStatsHtml(req: Request, res: Response): Promise<void> {
-        const stats = await this.gatherStats();
+        const stats = await this.getCachedStats();
         const htmlOutput = this.formatStatsAsHtml(stats);
-        
+
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', this.cacheControlHeader);
         res.status(200).send(htmlOutput);
+    }
+
+    private async getCachedStats(): Promise<AppStats> {
+        const now = Date.now();
+        if (this.statsCache && now < this.statsCache.expiresAt) {
+            return this.statsCache.data;
+        }
+
+        if (this.statsInFlight) {
+            return this.statsInFlight;
+        }
+
+        this.statsInFlight = this.gatherStats()
+            .then(stats => {
+                this.statsCache = {
+                    data: stats,
+                    expiresAt: Date.now() + this.cacheTtlMs,
+                };
+                return stats;
+            })
+            .finally(() => {
+                this.statsInFlight = null;
+            });
+
+        return this.statsInFlight;
     }
 
     private async gatherStats(): Promise<AppStats> {

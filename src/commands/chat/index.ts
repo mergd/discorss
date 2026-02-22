@@ -5,3 +5,4 @@ export { HelpCommand } from './help-command.js';
 export { InfoCommand } from './info-command.js';
 export { FeedbackCommand } from './feedback-command.js';
 export { ReleaseNotesCommand } from './releasenotes-command.js';
+export { ServerCountCommand } from './server-count-command.js';

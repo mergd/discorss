@@ -13,6 +13,7 @@ import {
     FeedCommand,
     FeedbackCommand,
     ReleaseNotesCommand,
+    ServerCountCommand,
 } from './commands/chat/index.js';
 import {
     ChatCommandMetadata,
@@ -77,6 +78,7 @@ async function start(): Promise<void> {
         new DevCommand(),
         new HelpCommand(),
         new InfoCommand(),
+        new ServerCountCommand(),
         new FeedbackCommand(),
         new ReleaseNotesCommand(),
         new FeedCommand(),
