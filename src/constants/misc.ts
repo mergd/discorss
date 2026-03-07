@@ -9,5 +9,6 @@ export const FAILURE_QUIET_PERIOD_HOURS = 24; // Quiet period after threshold is
 export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 15; // Increased from 5 for more aggressive initial backoff
 export const MAX_MINUTES = 1440; // Increased from 360 (6 hours) to 24 hours max
-export const MODEL_NAME = 'google/gemini-2.0-flash-lite-001';
+export const MODEL_NAME = 'google/gemini-2.5-flash-lite';
+export const FALLBACK_MODEL_NAME = 'openai/gpt-5.1-codex-mini';
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5; // When one feed in category fails, apply 50% of its backoff to others

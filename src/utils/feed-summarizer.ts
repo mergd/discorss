@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import type { ChatCompletionCreateParams } from 'openai/resources/chat/completions';
-import { MODEL_NAME } from '../constants/misc.js';
+import { MODEL_NAME, FALLBACK_MODEL_NAME } from '../constants/misc.js';
 import { Logger } from '../services/logger.js';
 import { posthog } from './analytics.js';
 import { getOpenAIClient } from '../services/openai-service.js';
@@ -65,7 +65,7 @@ function tryConsumeGuildSummary(guildId?: string | null): GuildSummaryConsumptio
 
     const now = Date.now();
     const existing = guildSummaryUsage.get(guildId) ?? [];
-    const recent = existing.filter((timestamp) => now - timestamp <= SUMMARY_WINDOW_MS);
+    const recent = existing.filter(timestamp => now - timestamp <= SUMMARY_WINDOW_MS);
 
     if (recent.length >= SUMMARY_LIMIT_PER_24H) {
         const oldestTimestamp = Math.min(...recent);
@@ -283,6 +283,74 @@ export async function summarizeContent(
     return { articleSummary, commentsSummary, articleReadTime };
 }
 
+type ModelCallResult =
+    | { ok: true; text: string; model: string; durationMs: number; inputTokens: number; outputTokens: number; totalTokens: number }
+    | { ok: false; retryable: boolean; error: string };
+
+async function callModel(
+    modelName: string,
+    prompt: string,
+    opts: { contentType: string; sourceUrl?: string; contentLength: number; guildId?: string | null }
+): Promise<ModelCallResult> {
+    const openAIClient = getOpenAIClient();
+    if (!openAIClient) {
+        return { ok: false, retryable: false, error: 'No OpenAI client available' };
+    }
+
+    const distinctId = opts.guildId || 'system_summarizer';
+    const useOpenRouter = !!env.OPENROUTER_API_KEY;
+    const startTime = Date.now();
+
+    const requestParams: ChatCompletionCreateParams & {
+        posthogDistinctId?: string;
+        posthogTraceId?: string;
+        posthogProperties?: Record<string, unknown>;
+        posthogPrivacyMode?: boolean;
+        max_tokens?: number;
+        max_completion_tokens?: number;
+    } = {
+        model: modelName,
+        messages: [{ role: 'user', content: prompt }],
+        ...(useOpenRouter ? { max_tokens: 300 } : { max_completion_tokens: 1000 }),
+    };
+
+    if (posthog) {
+        requestParams.posthogDistinctId = distinctId;
+        requestParams.posthogTraceId = `trace_${opts.sourceUrl || 'unknown'}_${Date.now()}`;
+        requestParams.posthogProperties = {
+            contentType: opts.contentType,
+            sourceUrl: opts.sourceUrl || undefined,
+            contentLength: opts.contentLength,
+            guildId: opts.guildId || undefined,
+        };
+        requestParams.posthogPrivacyMode = false;
+    }
+
+    const response = await openAIClient.chat.completions.create(requestParams);
+    const durationMs = Date.now() - startTime;
+
+    if (!response.choices?.length) {
+        Logger.warn(
+            `[Summarizer] No choices returned from ${modelName} for ${opts.sourceUrl}. Response: ${JSON.stringify(response)}`
+        );
+        return { ok: false, retryable: true, error: 'No choices in response' };
+    }
+
+    const choice = response.choices[0];
+    const text = choice?.message?.content || '';
+    const usage = response.usage;
+
+    return {
+        ok: true,
+        text,
+        model: modelName,
+        durationMs,
+        inputTokens: usage?.prompt_tokens ?? 0,
+        outputTokens: usage?.completion_tokens ?? 0,
+        totalTokens: usage?.total_tokens ?? 0,
+    };
+}
+
 async function summarizeSingleContent(
     content: string,
     contentType: 'ARTICLE CONTENT' | 'COMMENTS CONTENT',
@@ -328,101 +396,89 @@ ${truncatedContent}
 
 **Summary:**
     `;
-    try {
-        Logger.info(
-            `[Summarizer] Sending ${contentType} from ${sourceUrl || 'source'} to ${MODEL_NAME}...`
-        );
-        const startTime = Date.now();
 
-        const openAIClient = getOpenAIClient();
-        if (!openAIClient) {
-            throw new Error('No OpenAI client available');
+    const distinctId = guildId || 'system_summarizer';
+    const callOpts = { contentType, sourceUrl, contentLength: truncatedContent.length, guildId };
+    const modelsToTry = [MODEL_NAME, FALLBACK_MODEL_NAME];
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+        const modelName = modelsToTry[i];
+        const isFallback = i > 0;
+
+        if (isFallback) {
+            Logger.info(`[Summarizer] Retrying with fallback model ${modelName} for ${sourceUrl}`);
+        } else {
+            Logger.info(`[Summarizer] Sending ${contentType} from ${sourceUrl || 'source'} to ${modelName}...`);
         }
 
-        const distinctId = guildId || 'system_summarizer';
-
-        const useOpenRouter = !!env.OPENROUTER_API_KEY;
-        const requestParams: ChatCompletionCreateParams & {
-            posthogDistinctId?: string;
-            posthogTraceId?: string;
-            posthogProperties?: Record<string, unknown>;
-            posthogPrivacyMode?: boolean;
-            max_tokens?: number;
-            max_completion_tokens?: number;
-        } = {
-            model: MODEL_NAME,
-            messages: [
-                {
-                    role: 'user',
-                    content: prompt,
+        let result: ModelCallResult;
+        try {
+            result = await callModel(modelName, prompt, callOpts);
+        } catch (error: any) {
+            Logger.error(`[Summarizer] Error calling model ${modelName}:`, error);
+            posthog?.capture({
+                distinctId,
+                event: '$exception',
+                properties: {
+                    $exception_type: 'SummarizationModelError',
+                    $exception_message: error instanceof Error ? error.message : String(error),
+                    $exception_stack_trace: error instanceof Error ? error.stack : undefined,
+                    model: modelName,
+                    isFallback,
+                    sourceUrl,
+                    contentType,
+                    guildId: guildId || undefined,
                 },
-            ],
-            ...(useOpenRouter ? { max_tokens: 300 } : { max_completion_tokens: 1000 }),
-        };
-
-        if (posthog) {
-            requestParams.posthogDistinctId = distinctId;
-            requestParams.posthogTraceId = `trace_${sourceUrl || 'unknown'}_${Date.now()}`;
-            requestParams.posthogProperties = {
-                contentType,
-                sourceUrl: sourceUrl || undefined,
-                contentLength: truncatedContent.length,
-                guildId: guildId || undefined,
-            };
-            requestParams.posthogPrivacyMode = false;
+                groups: guildId ? { guild: guildId } : undefined,
+            });
+            if (i < modelsToTry.length - 1) continue;
+            return 'Could not generate summary: Error contacting summarization service.';
         }
 
-        const response = await openAIClient.chat.completions.create(requestParams);
-
-        const choice = response.choices[0];
-        const text = choice?.message?.content || '';
-        const finishReason = choice?.finish_reason;
-        const usage = response.usage;
-        const inputTokens = usage?.prompt_tokens ?? 0;
-        const outputTokens = usage?.completion_tokens ?? 0;
-        const totalTokens = usage?.total_tokens ?? 0;
-
-        const duration = Date.now() - startTime;
-        Logger.info(
-            `[Summarizer] Received summary from ${MODEL_NAME} (${duration}ms). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total. Finish reason: ${finishReason}`
-        );
-
-        if (!text || text.trim().length === 0) {
-            Logger.warn(
-                `[Summarizer] Received empty summary from ${MODEL_NAME}. Finish reason: ${finishReason}, Raw content: ${JSON.stringify(choice?.message)}`
-            );
+        if (result.ok === false) {
+            const { error: errMsg, retryable } = result;
             posthog?.capture({
                 distinctId,
                 event: 'summarization_empty_response',
                 properties: {
-                    model: MODEL_NAME,
+                    model: modelName,
+                    isFallback,
                     sourceUrl,
                     contentType,
-                    inputTokens,
-                    outputTokens,
-                    totalTokens,
                     guildId: guildId || undefined,
                     contentLength: truncatedContent.length,
+                    reason: errMsg,
                 },
                 groups: guildId ? { guild: guildId } : undefined,
             });
+            if (retryable && i < modelsToTry.length - 1) continue;
+            return 'Could not generate summary: No response from model.';
+        }
+
+        const { text, durationMs, inputTokens, outputTokens, totalTokens } = result;
+
+        Logger.info(
+            `[Summarizer] Received summary from ${modelName} (${durationMs}ms). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} in + ${outputTokens} out = ${totalTokens} total.${isFallback ? ' (fallback)' : ''}`
+        );
+
+        if (!text || text.trim().length === 0) {
+            Logger.warn(`[Summarizer] Received empty summary from ${modelName} for ${sourceUrl}.`);
+            posthog?.capture({
+                distinctId,
+                event: 'summarization_empty_response',
+                properties: { model: modelName, isFallback, sourceUrl, contentType, inputTokens, outputTokens, totalTokens, guildId: guildId || undefined, contentLength: truncatedContent.length },
+                groups: guildId ? { guild: guildId } : undefined,
+            });
+            if (i < modelsToTry.length - 1) continue;
             return 'Could not generate summary: Empty response from model.';
         }
+
         if (text.includes('Could not generate summary:')) {
             Logger.warn(`[Summarizer] Model indicated insufficient content for ${sourceUrl}.`);
             posthog?.capture({
                 distinctId,
                 event: 'summarization_insufficient_content',
-                properties: {
-                    model: MODEL_NAME,
-                    sourceUrl,
-                    contentType,
-                    inputTokens,
-                    outputTokens,
-                    totalTokens,
-                    guildId: guildId || undefined,
-                    contentLength: truncatedContent.length,
-                },
+                properties: { model: modelName, isFallback, sourceUrl, contentType, inputTokens, outputTokens, totalTokens, guildId: guildId || undefined, contentLength: truncatedContent.length },
                 groups: guildId ? { guild: guildId } : undefined,
             });
             return text;
@@ -432,11 +488,12 @@ ${truncatedContent}
             distinctId,
             event: 'summarization_success',
             properties: {
-                model: MODEL_NAME,
-                sourceUrl: sourceUrl,
+                model: modelName,
+                isFallback,
+                sourceUrl,
                 contentLength: truncatedContent.length,
                 summaryLength: text.length,
-                durationMs: duration,
+                durationMs,
                 contentType,
                 inputTokens,
                 outputTokens,
@@ -447,24 +504,7 @@ ${truncatedContent}
         });
 
         return text.trim();
-    } catch (error: any) {
-        Logger.error(`[Summarizer] Error calling OpenAI model ${MODEL_NAME}:`, error);
-        const distinctId = guildId || 'system_summarizer';
-
-        posthog?.capture({
-            distinctId,
-            event: '$exception',
-            properties: {
-                $exception_type: 'SummarizationModelError',
-                $exception_message: error instanceof Error ? error.message : String(error),
-                $exception_stack_trace: error instanceof Error ? error.stack : undefined,
-                model: MODEL_NAME,
-                sourceUrl: sourceUrl,
-                contentType,
-                guildId: guildId || undefined,
-            },
-            groups: guildId ? { guild: guildId } : undefined,
-        });
-        return 'Could not generate summary: Error contacting summarization service.';
     }
+
+    return 'Could not generate summary: Error contacting summarization service.';
 }
