@@ -400,22 +400,31 @@ ${truncatedContent}
     const distinctId = guildId || 'system_summarizer';
     const callOpts = { contentType, sourceUrl, contentLength: truncatedContent.length, guildId };
     const modelsToTry = [MODEL_NAME, FALLBACK_MODEL_NAME];
+    const sourceLabel = sourceUrl || 'source';
 
     for (let i = 0; i < modelsToTry.length; i++) {
         const modelName = modelsToTry[i];
         const isFallback = i > 0;
+        const attemptLabel = `${i + 1}/${modelsToTry.length}`;
 
         if (isFallback) {
-            Logger.info(`[Summarizer] Retrying with fallback model ${modelName} for ${sourceUrl}`);
+            Logger.info(
+                `[Summarizer] Retrying ${contentType} from ${sourceLabel} with fallback model ${modelName} (attempt ${attemptLabel}).`
+            );
         } else {
-            Logger.info(`[Summarizer] Sending ${contentType} from ${sourceUrl || 'source'} to ${modelName}...`);
+            Logger.info(
+                `[Summarizer] Sending ${contentType} from ${sourceLabel} to primary model ${modelName} (attempt ${attemptLabel}).`
+            );
         }
 
         let result: ModelCallResult;
         try {
             result = await callModel(modelName, prompt, callOpts);
         } catch (error: any) {
-            Logger.error(`[Summarizer] Error calling model ${modelName}:`, error);
+            Logger.error(
+                `[Summarizer] Error calling ${contentType} from ${sourceLabel} with model ${modelName} (attempt ${attemptLabel}):`,
+                error
+            );
             posthog?.capture({
                 distinctId,
                 event: '$exception',
@@ -458,11 +467,13 @@ ${truncatedContent}
         const { text, durationMs, inputTokens, outputTokens, totalTokens } = result;
 
         Logger.info(
-            `[Summarizer] Received summary from ${modelName} (${durationMs}ms). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} in + ${outputTokens} out = ${totalTokens} total.${isFallback ? ' (fallback)' : ''}`
+            `[Summarizer] Received ${contentType} summary from ${modelName} for ${sourceLabel} (${durationMs}ms, attempt ${attemptLabel}). Length: ${text?.length ?? 0}. Tokens: ${inputTokens} in + ${outputTokens} out = ${totalTokens} total.${isFallback ? ' (fallback)' : ''}`
         );
 
         if (!text || text.trim().length === 0) {
-            Logger.warn(`[Summarizer] Received empty summary from ${modelName} for ${sourceUrl}.`);
+            Logger.warn(
+                `[Summarizer] Received empty ${contentType} summary from ${modelName} for ${sourceLabel} (attempt ${attemptLabel}).`
+            );
             posthog?.capture({
                 distinctId,
                 event: 'summarization_empty_response',
@@ -474,7 +485,9 @@ ${truncatedContent}
         }
 
         if (text.includes('Could not generate summary:')) {
-            Logger.warn(`[Summarizer] Model indicated insufficient content for ${sourceUrl}.`);
+            Logger.warn(
+                `[Summarizer] Model ${modelName} indicated insufficient ${contentType} content for ${sourceLabel} (attempt ${attemptLabel}).`
+            );
             posthog?.capture({
                 distinctId,
                 event: 'summarization_insufficient_content',
