@@ -41,6 +41,26 @@ export interface FeedPollConfig {
     frequencyOverrideMinutes?: number | null;
 }
 
+export interface FeedRuntimeConfig {
+    id: string;
+    url: string;
+    channelId: string;
+    guildId: string;
+    nickname?: string | null;
+    category?: string | null;
+    lastItemGuid?: string | null;
+    consecutiveFailures: number;
+    frequencyOverrideMinutes?: number | null;
+    summarize: boolean;
+    useArchiveLinks: boolean;
+    recentLinks?: string[] | null;
+    backoffUntil?: Date | null;
+    ignoreErrors: boolean;
+    disableFailureNotifications: boolean;
+    disabled: boolean;
+    language?: string | null;
+}
+
 // Interface for Category Configuration
 export interface CategoryConfig {
     guildId: string;
@@ -307,6 +327,51 @@ export class FeedStorageService {
     }
 
     /**
+     * Retrieves the subset of feed fields needed during the polling/runtime path.
+     * This avoids loading stored summaries and other large columns into memory.
+     */
+    public static async getFeedRuntimeById(feedId: string): Promise<FeedRuntimeConfig | null> {
+        try {
+            const result = await (db as any)
+                .select({
+                    id: feeds.id,
+                    url: feeds.url,
+                    channelId: feeds.channelId,
+                    guildId: feeds.guildId,
+                    nickname: feeds.nickname,
+                    category: feeds.category,
+                    lastItemGuid: feeds.lastItemGuid,
+                    consecutiveFailures: feeds.consecutiveFailures,
+                    frequencyOverrideMinutes: feeds.frequencyOverrideMinutes,
+                    summarize: feeds.summarize,
+                    useArchiveLinks: feeds.useArchiveLinks,
+                    recentLinks: feeds.recentLinks,
+                    backoffUntil: feeds.backoffUntil,
+                    ignoreErrors: feeds.ignoreErrors,
+                    disableFailureNotifications: feeds.disableFailureNotifications,
+                    disabled: feeds.disabled,
+                    language: feeds.language,
+                })
+                .from(feeds)
+                .where(eq(feeds.id, feedId))
+                .limit(1);
+
+            if (result.length === 0) {
+                return null;
+            }
+
+            const feed = result[0];
+            return {
+                ...feed,
+                recentLinks: this.parseRecentLinks(feed.recentLinks),
+            };
+        } catch (error) {
+            console.error(`Error getting runtime feed by ID ${feedId}:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Searches for feeds by text query (nickname, URL, or ID).
      * Prioritizes feeds in the current channel, then falls back to fuzzy search if no exact matches.
      * @param guildId - The guild ID to search within
@@ -543,7 +608,7 @@ export class FeedStorageService {
 
         try {
             // Retrieve the current links first to merge and cap
-            const currentFeed = await this.getFeedById(feedId);
+            const currentFeed = await this.getFeedRuntimeById(feedId);
             if (!currentFeed) return; // Feed not found
 
             const currentLinks = currentFeed.recentLinks || [];
@@ -999,7 +1064,7 @@ export class FeedStorageService {
     ): Promise<string | null> {
         try {
             // First check if feed has a language set
-            const feed = await this.getFeedById(feedId);
+            const feed = await this.getFeedRuntimeById(feedId);
             if (feed?.language) {
                 return feed.language;
             }

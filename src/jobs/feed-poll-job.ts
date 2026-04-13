@@ -23,8 +23,8 @@ import {
 import { PAYWALLED_DOMAINS } from '../constants/paywalled-sites.js';
 import {
     CategoryConfig,
-    FeedConfig,
     FeedPollConfig,
+    FeedRuntimeConfig,
     FeedStorageService,
 } from '../services/feed-storage-service.js';
 import { Logger } from '../services/index.js';
@@ -94,6 +94,28 @@ function getEffectiveFrequency(feed: FeedPollConfig): number {
 
     // 3. Fallback to default
     return DEFAULT_FREQUENCY_MINUTES;
+}
+
+function cloneParsedFeedItem(item: ParsedFeedItem): ParsedFeedItem {
+    return {
+        title: item.title,
+        link: item.link,
+        pubDate: item.pubDate,
+        isoDate: item.isoDate,
+        guid: item.guid,
+        creator: item.creator,
+        author: item.author,
+        content: item.content,
+        contentSnippet: item.contentSnippet,
+        'content:encoded': item['content:encoded'],
+        comments: item.comments,
+    };
+}
+
+function clearParsedFeedItemContent(item: ParsedFeedItem): void {
+    item.content = undefined;
+    item.contentSnippet = undefined;
+    item['content:encoded'] = undefined;
 }
 
 export class FeedPollJob extends Job {
@@ -191,7 +213,9 @@ export class FeedPollJob extends Job {
     // Batch processor that checks feeds when they're due
     private startBatchProcessor(): void {
         const BATCH_CHECK_INTERVAL = 30000; // Check every 30 seconds
-        const MAX_CONCURRENT_FEEDS = 5; // Limit concurrent feed checks
+        const DEFAULT_MAX_CONCURRENT_FEEDS = 5;
+        const THROTTLED_MAX_CONCURRENT_FEEDS = 2;
+        const MEMORY_THROTTLE_RSS_MB = 240;
         const MAX_QUEUE_SIZE = 5000; // Maximum feed queue size before warning
         const STALE_FEED_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 7 days
         let cycleCount = 0;
@@ -222,11 +246,22 @@ export class FeedPollJob extends Job {
 
                 // Track memory before batch processing
                 const memBefore = process.memoryUsage();
+                const rssBeforeMB = Math.round(memBefore.rss / 1024 / 1024);
+                const maxConcurrentFeeds =
+                    rssBeforeMB >= MEMORY_THROTTLE_RSS_MB
+                        ? THROTTLED_MAX_CONCURRENT_FEEDS
+                        : DEFAULT_MAX_CONCURRENT_FEEDS;
+
+                if (maxConcurrentFeeds !== DEFAULT_MAX_CONCURRENT_FEEDS) {
+                    Logger.warn(
+                        `[FeedPollJob] High baseline RSS ${rssBeforeMB}MB. Throttling feed concurrency to ${maxConcurrentFeeds}.`
+                    );
+                }
 
                 // Process feeds in batches to avoid overwhelming the system
                 const batches = [];
-                for (let i = 0; i < feedsToCheck.length; i += MAX_CONCURRENT_FEEDS) {
-                    batches.push(feedsToCheck.slice(i, i + MAX_CONCURRENT_FEEDS));
+                for (let i = 0; i < feedsToCheck.length; i += maxConcurrentFeeds) {
+                    batches.push(feedsToCheck.slice(i, i + maxConcurrentFeeds));
                 }
 
                 for (const batch of batches) {
@@ -381,7 +416,7 @@ export class FeedPollJob extends Job {
      * Applies exponential backoff to a feed and coordinates backoff with other feeds in the same category.
      */
     private async applyBackoffWithCategoryCoordination(
-        feedConfig: FeedConfig | FeedPollConfig
+        feedConfig: FeedRuntimeConfig | FeedPollConfig
     ): Promise<void> {
         const fails =
             ('consecutiveFailures' in feedConfig ? (feedConfig.consecutiveFailures ?? 0) : 0) + 1;
@@ -403,7 +438,7 @@ export class FeedPollJob extends Job {
                     Date.now() + coordinatedBackoffMinutes * 60 * 1000
                 );
                 for (const categoryFeedId of categoryFeedIds) {
-                    const categoryFeed = await FeedStorageService.getFeedById(categoryFeedId);
+                    const categoryFeed = await FeedStorageService.getFeedRuntimeById(categoryFeedId);
                     if (categoryFeed) {
                         const existingBackoff = categoryFeed.backoffUntil
                             ? new Date(categoryFeed.backoffUntil)
@@ -426,7 +461,7 @@ export class FeedPollJob extends Job {
     // Check a single feed for new items (now fetches fresh config including links)
     public async checkFeed(feedId: string): Promise<void> {
         // Fetch the latest feed config from DB, including recent links
-        const feedConfig = await FeedStorageService.getFeedById(feedId);
+        const feedConfig = await FeedStorageService.getFeedRuntimeById(feedId);
         if (!feedConfig) {
             Logger.warn(`[FeedPollJob] Feed config not found for ID ${feedId}. Skipping check.`);
             // Remove from queue if feed is permanently gone
@@ -513,7 +548,7 @@ export class FeedPollJob extends Job {
                 }
                 // --- End Link Deduplication Check ---
 
-                newItems.push(item); // Add to new items if passes checks
+                newItems.push(cloneParsedFeedItem(item));
 
                 // Limit items per batch to prevent memory spikes
                 const MAX_ITEMS_PER_FEED = 5;
@@ -544,6 +579,7 @@ export class FeedPollJob extends Job {
                 );
                 // postNewItems now handles its own success/failure reporting and link updating.
                 await this.postNewItems(feedConfig, newItems.reverse(), fetchedFeed.title);
+                newItems.length = 0;
             }
         } catch (error: any) {
             // Handle common errors gracefully & Record failure
@@ -677,7 +713,7 @@ export class FeedPollJob extends Job {
      * Handles paywalled links and summarizing comments.
      */
     private async postNewItems(
-        feedConfig: FeedConfig,
+        feedConfig: FeedRuntimeConfig,
         items: ParsedFeedItem[],
         feedTitle?: string
     ): Promise<void> {
@@ -802,10 +838,15 @@ export class FeedPollJob extends Job {
                         // PostHog capture is now inside summarizeContent/fetchPageContent
                         item.articleSummary =
                             'Could not generate summary: Error during processing.';
+                    } finally {
+                        clearParsedFeedItemContent(item);
+                        articleContent = null;
+                        commentsContent = null;
                     }
                 }
             }
 
+            clearParsedFeedItemContent(item);
             itemsToSend.push(item);
         }
 
@@ -1264,7 +1305,7 @@ export class FeedPollJob extends Job {
      * Updated to mention 24-hour period.
      */
     private async notifyFeedFailure(
-        feedConfig: FeedConfig,
+        feedConfig: FeedRuntimeConfig,
         error: any,
         failureCount: number, // This is now the 24-hour count
         isPermissionError: boolean = false
@@ -1401,7 +1442,7 @@ export class FeedPollJob extends Job {
      * Rate limited to avoid spamming users.
      */
     private async sendFeedErrorMessage(
-        feedConfig: FeedConfig,
+        feedConfig: FeedRuntimeConfig,
         error: any,
         errorType: 'fetch' | 'parse' | 'summary'
     ): Promise<void> {
@@ -1521,7 +1562,7 @@ export class FeedPollJob extends Job {
      * Sends a notification when a feed is auto-disabled due to persistent errors.
      */
     private async sendFeedDisabledNotification(
-        feedConfig: FeedConfig,
+        feedConfig: FeedRuntimeConfig,
         errorType: string,
         timePeriod: string
     ): Promise<void> {

@@ -9,7 +9,66 @@ import { env } from './env.js';
 
 const SUMMARY_LIMIT_PER_24H = 100;
 const SUMMARY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_HTML_BYTES = 50_000;
+const MAX_EXTRACTED_CONTENT_LENGTH = 8_000;
 const guildSummaryUsage: Map<string, number[]> = new Map();
+
+function disposeResponseBody(res: { body?: unknown | null }): void {
+    const body = res.body;
+
+    if (
+        body &&
+        typeof body === 'object' &&
+        'destroy' in body &&
+        typeof body.destroy === 'function'
+    ) {
+        body.destroy();
+    }
+}
+
+async function readResponseTextLimited(
+    res: { body?: AsyncIterable<Uint8Array | Buffer | string> | null },
+    maxBytes: number
+): Promise<{ text: string; truncated: boolean }> {
+    if (!res.body) {
+        return { text: '', truncated: false };
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    let truncated = false;
+
+    try {
+        for await (const chunk of res.body) {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            const remainingBytes = maxBytes - totalBytes;
+
+            if (remainingBytes <= 0) {
+                truncated = true;
+                break;
+            }
+
+            if (buffer.length > remainingBytes) {
+                chunks.push(buffer.subarray(0, remainingBytes));
+                totalBytes += remainingBytes;
+                truncated = true;
+                break;
+            }
+
+            chunks.push(buffer);
+            totalBytes += buffer.length;
+        }
+    } finally {
+        if (truncated) {
+            disposeResponseBody(res);
+        }
+    }
+
+    return {
+        text: Buffer.concat(chunks, totalBytes).toString('utf8'),
+        truncated,
+    };
+}
 
 /**
  * Cleans up stale guild entries from the summary usage map.
@@ -103,12 +162,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             Logger.warn(
                 `[FeedSummarizer] Failed to fetch page content from ${url}. Status: ${res.status}`
             );
-            // Ensure response body is consumed to prevent memory leaks
-            try {
-                await res.text();
-            } catch {
-                // Ignore errors when consuming failed response
-            }
+            disposeResponseBody(res);
             // Capture failure in PostHog
             posthog?.capture({
                 distinctId: 'system_summarizer',
@@ -128,23 +182,15 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             Logger.warn(
                 `[FeedSummarizer] Skipping non-HTML content type (${contentType}) for URL: ${url}`
             );
-            // Ensure response body is consumed to prevent memory leaks
-            try {
-                await res.text();
-            } catch {
-                // Ignore errors when consuming response
-            }
+            disposeResponseBody(res);
             return null; // Skip non-html pages
         }
 
-        // Limit HTML content to prevent memory issues
-        const fullText = await res.text();
-        const maxHtmlLength = 50000; // 50KB max
-        const html =
-            fullText.length > maxHtmlLength ? fullText.substring(0, maxHtmlLength) : fullText;
+        // Read only the first chunk of HTML we care about so large pages do not balloon memory.
+        const { text: html, truncated } = await readResponseTextLimited(res, MAX_HTML_BYTES);
 
         Logger.info(
-            `[FeedSummarizer] Fetched HTML for URL: ${url}. Length: ${html.length} (truncated: ${html.length >= 50000})`
+            `[FeedSummarizer] Fetched HTML for URL: ${url}. Length: ${html.length} (truncated: ${truncated})`
         );
 
         // Use regex-based approach instead of JSDOM for better memory efficiency
@@ -219,7 +265,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
         );
 
         // More aggressive content limiting to reduce memory usage
-        const maxLength = Math.min(8000, cleanedText.length); // Reduced from 15000 to 8000
+        const maxLength = Math.min(MAX_EXTRACTED_CONTENT_LENGTH, cleanedText.length);
         const result = cleanedText.substring(0, maxLength);
 
         // Clear variables to help GC
