@@ -36,7 +36,8 @@ import {
     cleanupStaleSummaryUsage,
     getSummaryUsageMapSize,
 } from '../utils/feed-summarizer.js';
-import { getRSSParser, resetRSSParser } from '../utils/rss-parser.js';
+import { isYouTubeFeed } from '../utils/feed-utils.js';
+import { parseFeedUrl, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
 interface ParsedFeedItem {
@@ -479,8 +480,7 @@ export class FeedPollJob extends Job {
         }
 
         try {
-            const parser = getRSSParser();
-            const fetchedFeed = await parser.parseURL(feedConfig.url);
+            const fetchedFeed = await parseFeedUrl(feedConfig.url);
 
             // Update last checked time regardless of items found, as long as fetch succeeded
             await FeedStorageService.updateLastChecked(feedConfig.id);
@@ -598,7 +598,11 @@ export class FeedPollJob extends Job {
                 await FeedStorageService.recordFailure(feedConfig.id, errorMessage);
 
                 // Check if feed should be auto-disabled due to persistent errors
-                if (!feedConfig.ignoreErrors && !feedConfig.disabled) {
+                if (
+                    !feedConfig.ignoreErrors &&
+                    !feedConfig.disabled &&
+                    !isYouTubeFeed(feedConfig)
+                ) {
                     const isDeadFeed = await FeedStorageService.shouldAutoDisableDeadFeed(
                         feedConfig.id
                     );
@@ -734,13 +738,12 @@ export class FeedPollJob extends Job {
             // --- Content Fetching --- (Only if summarization enabled)
             if (feedConfig.summarize) {
                 // Skip summarization for YouTube feeds (they don't have scrapable text content)
-                const isYouTubeFeed =
-                    feedConfig.url?.includes('youtube.com/feeds/videos.xml') ||
-                    feedConfig.category === 'YouTube' ||
+                const skipYouTubeSummarization =
+                    isYouTubeFeed(feedConfig) ||
                     item.link?.includes('youtube.com/watch') ||
                     item.link?.includes('youtu.be/');
 
-                if (isYouTubeFeed) {
+                if (skipYouTubeSummarization) {
                     Logger.info(
                         `[FeedPollJob] Skipping summarization for YouTube feed item: ${item.link}`
                     );
@@ -1310,11 +1313,7 @@ export class FeedPollJob extends Job {
         failureCount: number, // This is now the 24-hour count
         isPermissionError: boolean = false
     ): Promise<void> {
-        // Skip notifications for YouTube feeds (they're known to be unreliable)
-        const isYouTubeFeed =
-            feedConfig.url?.includes('youtube.com/feeds/videos.xml') ||
-            feedConfig.category === 'YouTube';
-        if (isYouTubeFeed || feedConfig.disableFailureNotifications) {
+        if (isYouTubeFeed(feedConfig) || feedConfig.disableFailureNotifications) {
             Logger.info(
                 `[FeedPollJob] Skipping failure notification for feed ${feedConfig.id} - YouTube feed or notifications disabled`
             );
@@ -1446,11 +1445,7 @@ export class FeedPollJob extends Job {
         error: any,
         errorType: 'fetch' | 'parse' | 'summary'
     ): Promise<void> {
-        // Skip notifications for YouTube feeds (they're known to be unreliable)
-        const isYouTubeFeed =
-            feedConfig.url?.includes('youtube.com/feeds/videos.xml') ||
-            feedConfig.category === 'YouTube';
-        if (isYouTubeFeed) {
+        if (isYouTubeFeed(feedConfig)) {
             Logger.info(`[FeedPollJob] Skipping error message for YouTube feed ${feedConfig.id}`);
             return;
         }

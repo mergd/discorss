@@ -266,6 +266,12 @@ export const ChatCommandMetadata: {
                         description: 'Language code for summaries (e.g., en, es, fr, de). Overrides server language.',
                         required: false,
                     },
+                    {
+                        type: ApplicationCommandOptionType.Boolean,
+                        name: 'enabled',
+                        description: 'Enable or disable polling for this feed (re-enables auto-disabled feeds)',
+                        required: false,
+                    },
                 ],
             },
             {

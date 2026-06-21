@@ -1,6 +1,6 @@
 import Parser from 'rss-parser';
+import { fetchRssXml } from './rss-fetch.js';
 
-// Shared RSS parser instance to reduce memory footprint
 let sharedParser: Parser<any, any> | null = null;
 
 export function getRSSParser(): Parser<any, any> {
@@ -9,7 +9,7 @@ export function getRSSParser(): Parser<any, any> {
             customFields: {
                 item: [
                     'guid',
-                    'isoDate', 
+                    'isoDate',
                     'creator',
                     'author',
                     'content',
@@ -17,7 +17,6 @@ export function getRSSParser(): Parser<any, any> {
                     'comments',
                 ],
             },
-            // Allow feeds with empty titles or other minor issues
             maxRedirects: 5,
             timeout: 60000,
         });
@@ -27,4 +26,9 @@ export function getRSSParser(): Parser<any, any> {
 
 export function resetRSSParser(): void {
     sharedParser = null;
+}
+
+export async function parseFeedUrl(url: string): Promise<Parser.Output<any>> {
+    const xml = await fetchRssXml(url);
+    return getRSSParser().parseString(xml);
 }

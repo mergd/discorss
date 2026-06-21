@@ -532,6 +532,7 @@ export class FeedStorageService {
             lastCommentsSummary?: string | null;
             ignoreErrors?: boolean | null;
             disableFailureNotifications?: boolean | null;
+            disabled?: boolean | null;
             language?: string | null;
             // Note: recentLinks is handled separately by updateRecentLinks
         }
@@ -551,6 +552,13 @@ export class FeedStorageService {
         if ('ignoreErrors' in updates) valuesToUpdate.ignoreErrors = updates.ignoreErrors;
         if ('disableFailureNotifications' in updates)
             valuesToUpdate.disableFailureNotifications = updates.disableFailureNotifications;
+        if ('disabled' in updates) {
+            valuesToUpdate.disabled = updates.disabled;
+            if (updates.disabled === false) {
+                valuesToUpdate.consecutiveFailures = 0;
+                valuesToUpdate.backoffUntil = null;
+            }
+        }
         if ('language' in updates) valuesToUpdate.language = updates.language;
 
         if (Object.keys(valuesToUpdate).length === 0) {

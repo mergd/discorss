@@ -39,7 +39,10 @@
         "db:backup": "bun run build && bun --enable-source-maps dist/scripts/backup-db.js",
         "db:restore": "bun run build && bun --enable-source-maps dist/scripts/restore-db.js",
         "docker:build": "docker build -t discord-bot-rss . && docker run -d --name discord-bot-rss discord-bot-rss",
-        "docker:run": "docker start discord-bot-rss"
+        "docker:run": "docker start discord-bot-rss",
+        "worker:rss-fetch:deploy": "cd workers/rss-fetch && bun run deploy",
+        "worker:rss-fetch:dev": "cd workers/rss-fetch && bun run dev",
+        "worker:rss-fetch:typecheck": "cd workers/rss-fetch && bun run typecheck"
     },
     "dependencies": {
         "@discordjs/rest": "^2.2.0",

@@ -20,7 +20,7 @@ import { InteractionUtils, StringUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 
 // Use shared RSS Parser instance to reduce memory footprint
-import { getRSSParser } from '../../utils/rss-parser.js';
+import { parseFeedUrl } from '../../utils/rss-parser.js';
 
 // Helper to get a short ID (first 8 chars of UUID)
 function getShortId(uuid: string): string {
@@ -156,8 +156,12 @@ async function generateFeedListPage(
             f.consecutiveFailures && f.consecutiveFailures > 0
                 ? `*⚠️ Fetch Error (${f.consecutiveFailures} failure${f.consecutiveFailures > 1 ? 's' : ''})*`
                 : '';
+        const disabledLine = f.disabled ? '*🔴 Polling disabled — use `/feed edit` with `enabled:true` to re-enable*' : '';
 
         let description = `${headerLine}${channelMention}\n${urlLine}\n${frequencyLine}`;
+        if (disabledLine) {
+            description += `\n${disabledLine}`;
+        }
         if (errorLine) {
             description += `\n${errorLine}`;
         }
@@ -257,8 +261,7 @@ export class FeedCommand implements Command {
                         let finalNickname = nickname;
                         try {
                             console.log(`Validating feed: ${feedUrl}`);
-                            const rssParser = getRSSParser();
-                            const feed = await rssParser.parseURL(feedUrl);
+                            const feed = await parseFeedUrl(feedUrl);
 
                             if (!feed || !feed.items || feed.items.length === 0) {
                                 await InteractionUtils.editReply(
@@ -291,8 +294,7 @@ export class FeedCommand implements Command {
 
                             if (summarize) {
                                 try {
-                                    const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(feedUrl);
+                                    const feed = await parseFeedUrl(feedUrl);
                                     const firstItem = feed.items?.[0];
 
                                     if (firstItem) {
@@ -745,6 +747,7 @@ export class FeedCommand implements Command {
                         const newFrequency = intr.options.getInteger('frequency');
                         const newSummarize = intr.options.getBoolean('summarize');
                         const newUseArchiveLinks = intr.options.getBoolean('use_archive_links');
+                        const newEnabled = intr.options.getBoolean('enabled');
                         const newLanguageInput = intr.options.getString('language');
                         // Empty string or whitespace means clear the language (null)
                         const newLanguage =
@@ -784,11 +787,12 @@ export class FeedCommand implements Command {
                             newFrequency === null &&
                             newSummarize === null &&
                             newUseArchiveLinks === null &&
-                            newLanguage === null
+                            newLanguage === null &&
+                            newEnabled === null
                         ) {
                             await InteractionUtils.editReply(
                                 intr,
-                                'Please provide at least one detail to update (nickname, category, frequency, summarize, use_archive_links, or language).'
+                                'Please provide at least one detail to update (nickname, category, frequency, summarize, use_archive_links, language, or enabled).'
                             );
                             return;
                         }
@@ -821,6 +825,7 @@ export class FeedCommand implements Command {
                                 summarize?: boolean | null;
                                 useArchiveLinks?: boolean | null;
                                 language?: string | null;
+                                disabled?: boolean | null;
                                 lastArticleSummary?: string | null;
                                 lastCommentsSummary?: string | null;
                             } = {};
@@ -831,6 +836,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes: targetFeed.frequencyOverrideMinutes,
                                 summarize: targetFeed.summarize,
                                 useArchiveLinks: targetFeed.useArchiveLinks,
+                                disabled: targetFeed.disabled,
                             };
 
                             // Only include fields that were actually provided in the command
@@ -846,6 +852,8 @@ export class FeedCommand implements Command {
                                 updates.useArchiveLinks = newUseArchiveLinks;
                             if (intr.options.getString('language') !== null)
                                 updates.language = newLanguage; // Already validated above
+                            if (intr.options.getBoolean('enabled') !== null)
+                                updates.disabled = newEnabled === false;
 
                             // Call the update service
                             const updated = await FeedStorageService.updateFeedDetails(
@@ -884,6 +892,11 @@ export class FeedCommand implements Command {
                                             old: originalValues.useArchiveLinks,
                                             new: updates.useArchiveLinks,
                                         };
+                                    if (updates.disabled !== undefined)
+                                        changes.enabled = {
+                                            old: !originalValues.disabled,
+                                            new: !updates.disabled,
+                                        };
 
                                     if (Object.keys(changes).length > 0) {
                                         // Only capture if something changed
@@ -916,7 +929,11 @@ export class FeedCommand implements Command {
                                                 : inlineCode(String(value));
                                         if (key === 'frequencyOverrideMinutes' && value !== null)
                                             displayValue += ' min';
-                                        return `${key.replace('OverrideMinutes', '')}: ${displayValue}`;
+                                        if (key === 'disabled')
+                                            displayValue = value ? 'disabled' : 'enabled';
+                                        const displayKey =
+                                            key === 'disabled' ? 'enabled' : key.replace('OverrideMinutes', '');
+                                        return `${displayKey}: ${displayValue}`;
                                     })
                                     .join(', ');
                                 await InteractionUtils.editReply(
@@ -934,8 +951,7 @@ export class FeedCommand implements Command {
                                 // Try to re-summarize latest item
                                 let contentToSummarize = '';
                                 try {
-                                    const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(targetFeed.url);
+                                    const feed = await parseFeedUrl(targetFeed.url);
                                     if (feed.items && feed.items[0] && feed.items[0].content) {
                                         contentToSummarize = feed.items[0].content;
                                     } else if (feed.items && feed.items[0] && feed.items[0].link) {
@@ -979,8 +995,7 @@ export class FeedCommand implements Command {
                         const url = intr.options.getString('url', true);
                         const summarize = intr.options.getBoolean('summarize') ?? false;
                         try {
-                            const rssParser = getRSSParser();
-                            const feed = await rssParser.parseURL(url);
+                            const feed = await parseFeedUrl(url);
                             const embed = new EmbedBuilder()
                                 .setTitle(
                                     `Test Feed: ${StringUtils.truncate(feed.title || 'No Title', 150)}`
@@ -1185,8 +1200,7 @@ ${linkLine}${snippet}`;
 
                             // Feed found, now try to fetch and parse it
                             try {
-                                const rssParser = getRSSParser();
-                                const feed = await rssParser.parseURL(targetFeed.url);
+                                const feed = await parseFeedUrl(targetFeed.url);
                                 const embed = new EmbedBuilder()
                                     .setTitle(
                                         `Poke Result: ${feed.title || targetFeed.nickname || 'No Title'}`
@@ -1482,8 +1496,7 @@ ${linkLine}${snippet}`;
 
                         // Validate channel ID by trying to fetch the feed
                         try {
-                            const rssParser = getRSSParser();
-                            const feed = await rssParser.parseURL(feedUrl);
+                            const feed = await parseFeedUrl(feedUrl);
                             if (feed.title) {
                                 feedNickname = feed.title.trim();
                             } else {
@@ -1508,8 +1521,7 @@ ${linkLine}${snippet}`;
                             // Attempt summarization if requested (usually from video link/description)
                             if (summarize) {
                                 try {
-                                    const rssParser = getRSSParser();
-                                    const feed = await rssParser.parseURL(feedUrl);
+                                    const feed = await parseFeedUrl(feedUrl);
                                     const firstItem = feed.items?.[0];
                                     if (firstItem?.link) {
                                         // YouTube feeds don't have typical article content, summarize based on link/metadata?

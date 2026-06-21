@@ -19,4 +19,6 @@ export const env = {
     OPENROUTER_API_KEY: getEnvVar('OPENROUTER_API_KEY', true),
     FEEDBACK_WEBHOOK_URL: getEnvVar('FEEDBACK_WEBHOOK_URL', true),
     POSTHOG_API_KEY: getEnvVar('POSTHOG_API_KEY', true),
+    FETCH_PROXY_URL: getEnvVar('FETCH_PROXY_URL', true),
+    FETCH_PROXY_SECRET: getEnvVar('FETCH_PROXY_SECRET', true),
 };
