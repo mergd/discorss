@@ -949,7 +949,7 @@ export class FeedPollJob extends Job {
                             if (displayLink?.includes('youtube.com/shorts/')) {
                                 displayLink = displayLink.replace('/shorts/', '/watch?v=');
                             }
-                            let linkLine = displayLink ? `<${displayLink}>` : 'No link available.';
+                            let linkLine = displayLink ? displayLink : 'No link available.';
                             let hasPaywalledLink = false; // Track if we added an archive link
                             // Show archive link if useArchiveLinks is enabled OR if the link is paywalled
                             const shouldShowArchive =
@@ -964,7 +964,7 @@ export class FeedPollJob extends Job {
                                     item.comments,
                                     paywalledDomainsList
                                 );
-                                linkLine += ` | [Comments](<${item.comments}>)`;
+                                linkLine += ` | [Comments](${item.comments})`;
                                 // Show archive for comments if useArchiveLinks is enabled OR if comments are paywalled
                                 const shouldShowArchiveComments =
                                     useArchiveLinks || commentsIsPaywalled;

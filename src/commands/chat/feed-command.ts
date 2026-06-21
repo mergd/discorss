@@ -1085,7 +1085,7 @@ export class FeedCommand implements Command {
                                             : 'N/A';
 
                                         // Format link with paywall check
-                                        let linkLine = itemLink ? `<${itemLink}>` : 'No link';
+                                        let linkLine = itemLink ? itemLink : 'No link';
                                         let hasPaywalledLink = false;
                                         if (itemLink && isPaywalled(itemLink)) {
                                             linkLine += ` | [Archive](${getArchiveUrl(itemLink)})`;
@@ -1093,7 +1093,7 @@ export class FeedCommand implements Command {
                                         }
                                         // Add comments link if present and different
                                         if (item.comments && item.comments !== itemLink) {
-                                            linkLine += ` | [Comments](<${item.comments}>)`;
+                                            linkLine += ` | [Comments](${item.comments})`;
                                             if (isPaywalled(item.comments)) {
                                                 linkLine += ` ([Archive](${getArchiveUrl(item.comments)}))`;
                                                 hasPaywalledLink = true;
