@@ -1023,12 +1023,8 @@ export class FeedPollJob extends Job {
 
                                 await (channel as TextChannel | NewsChannel).send({
                                     content: contentToSend,
-                                    embeds: [],
                                     allowedMentions: { parse: [] },
-                                    // Suppress embeds if a paywalled link (article or comments) was detected
-                                    flags: hasPaywalledLink
-                                        ? [messageFlags] // messageFlags is 4 (MessageFlags.SuppressEmbeds)
-                                        : undefined,
+                                    flags: hasPaywalledLink ? messageFlags : undefined,
                                 });
 
                                 if (item.link) {
