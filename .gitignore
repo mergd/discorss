@@ -12,6 +12,17 @@
 __*.mdc
 
 # =====================================================
+# Cloudflare Workers
+# Wrangler bundles from .ts at deploy — don't commit emit output
+# =====================================================
+workers/**/src/**/*.js
+workers/**/src/**/*.js.map
+workers/**/src/**/*.d.ts
+.wrangler/
+workers/**/.wrangler/
+workers/**/.dev.vars
+
+# =====================================================
 # Node.js
 # =====================================================
 # Logs
