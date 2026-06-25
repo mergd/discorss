@@ -7,11 +7,8 @@ import { getOpenAIClient } from '../services/openai-service.js';
 import { calculateReadTime } from './read-time.js';
 import { env } from './env.js';
 
-const SUMMARY_LIMIT_PER_24H = 150;
-const SUMMARY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_HTML_BYTES = 50_000;
 const MAX_EXTRACTED_CONTENT_LENGTH = 8_000;
-const guildSummaryUsage: Map<string, number[]> = new Map();
 
 function disposeResponseBody(res: { body?: unknown | null }): void {
     const body = res.body;
@@ -68,78 +65,6 @@ async function readResponseTextLimited(
         text: Buffer.concat(chunks, totalBytes).toString('utf8'),
         truncated,
     };
-}
-
-/**
- * Cleans up stale guild entries from the summary usage map.
- * Removes guilds that haven't made any summarization calls in the last 24 hours.
- * Call this periodically to prevent memory leaks.
- */
-export function cleanupStaleSummaryUsage(): number {
-    const now = Date.now();
-    let removedCount = 0;
-
-    for (const [guildId, timestamps] of guildSummaryUsage) {
-        // Filter to only recent timestamps
-        const recentTimestamps = timestamps.filter(ts => now - ts <= SUMMARY_WINDOW_MS);
-
-        if (recentTimestamps.length === 0) {
-            // No recent activity - remove the guild entirely
-            guildSummaryUsage.delete(guildId);
-            removedCount++;
-        } else if (recentTimestamps.length !== timestamps.length) {
-            // Update with cleaned timestamps
-            guildSummaryUsage.set(guildId, recentTimestamps);
-        }
-    }
-
-    return removedCount;
-}
-
-/**
- * Gets the current size of the guild summary usage map (for monitoring).
- */
-export function getSummaryUsageMapSize(): number {
-    return guildSummaryUsage.size;
-}
-
-type GuildSummaryConsumptionResult = {
-    allowed: boolean;
-    resetInMs?: number;
-};
-
-function formatResetDuration(resetInMs?: number): string {
-    if (!resetInMs || resetInMs <= 0) return '24 hours';
-
-    const hours = Math.floor(resetInMs / (60 * 60 * 1000));
-    const minutes = Math.ceil((resetInMs % (60 * 60 * 1000)) / (60 * 1000));
-
-    if (hours > 0 && minutes > 0) return `${hours} hour(s) ${minutes} minute(s)`;
-    if (hours > 0) return `${hours} hour(s)`;
-    return `${minutes} minute(s)`;
-}
-
-function tryConsumeGuildSummary(guildId?: string | null): GuildSummaryConsumptionResult {
-    if (!guildId) return { allowed: true };
-
-    const now = Date.now();
-    const existing = guildSummaryUsage.get(guildId) ?? [];
-    const recent = existing.filter(timestamp => now - timestamp <= SUMMARY_WINDOW_MS);
-
-    if (recent.length >= SUMMARY_LIMIT_PER_24H) {
-        const oldestTimestamp = Math.min(...recent);
-        const resetInMs = SUMMARY_WINDOW_MS - (now - oldestTimestamp);
-
-        Logger.warn(
-            `[Summarizer] Guild ${guildId} reached the daily AI summary limit (${SUMMARY_LIMIT_PER_24H}). Next reset in ~${formatResetDuration(resetInMs)}.`
-        );
-        guildSummaryUsage.set(guildId, recent); // persist pruned timestamps
-        return { allowed: false, resetInMs };
-    }
-
-    recent.push(now);
-    guildSummaryUsage.set(guildId, recent);
-    return { allowed: true };
 }
 
 /**
@@ -288,7 +213,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
 }
 
 /**
- * Summarizes the given content using an AI model via OpenAI.
+ * Summarizes the given content using OpenRouter free models.
  * Handles potential errors and structures the prompt carefully.
  */
 export async function summarizeContent(
@@ -407,12 +332,6 @@ async function summarizeSingleContent(
     if (!content) {
         Logger.warn(`[Summarizer] No ${contentType} provided for summarization.`);
         return 'Could not generate summary: No content available.';
-    }
-
-    const { allowed, resetInMs } = tryConsumeGuildSummary(guildId);
-    if (!allowed) {
-        const resetText = formatResetDuration(resetInMs);
-        return `Could not generate summary: Daily AI summary limit reached (max ${SUMMARY_LIMIT_PER_24H} summaries per guild every 24 hours). The cap resets in about ${resetText}. No AI call was made for this request.`;
     }
 
     const maxInputLength = 10000;

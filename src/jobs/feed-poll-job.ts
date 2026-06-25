@@ -33,8 +33,6 @@ import { posthog } from '../utils/analytics.js';
 import {
     fetchPageContent,
     summarizeContent,
-    cleanupStaleSummaryUsage,
-    getSummaryUsageMapSize,
 } from '../utils/feed-summarizer.js';
 import { isYouTubeFeed } from '../utils/feed-utils.js';
 import { parseFeedUrl, resetRSSParser } from '../utils/rss-parser.js';
@@ -307,10 +305,9 @@ export class FeedPollJob extends Job {
                     const memUsage = process.memoryUsage();
                     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
                     const currentRssMB = Math.round(memUsage.rss / 1024 / 1024);
-                    const summaryMapSize = getSummaryUsageMapSize();
 
                     Logger.info(
-                        `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}, SummaryMap: ${summaryMapSize}`
+                        `[FeedPollJob] Memory - RSS: ${currentRssMB}MB, Heap: ${heapUsedMB}MB, Queue: ${feedQueue.size}`
                     );
 
                     // Warning threshold - try cleanup at 280MB
@@ -320,7 +317,6 @@ export class FeedPollJob extends Job {
                         );
                         resetRSSParser();
                         resetOpenAIClient();
-                        cleanupStaleSummaryUsage();
                         if (global.gc) global.gc();
                     }
 
@@ -359,14 +355,6 @@ export class FeedPollJob extends Job {
                     if (deletedFailures > 0) {
                         Logger.info(
                             `[FeedPollJob] Cleaned up ${deletedFailures} old failure records`
-                        );
-                    }
-
-                    // Clean up stale guild summary usage entries to prevent memory leaks
-                    const removedGuilds = cleanupStaleSummaryUsage();
-                    if (removedGuilds > 0) {
-                        Logger.info(
-                            `[FeedPollJob] Cleaned up ${removedGuilds} stale guild summary usage entries`
                         );
                     }
 
