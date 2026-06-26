@@ -60,6 +60,7 @@ async function main() {
                 guildId: GUILD_ID,
                 addedBy: ADDED_BY,
                 summarize: feed.summarize,
+                useArchiveLinks: false,
             });
             console.log(`✅ Added ${feed.nickname} → <#${feed.channelId}> (${id})`);
             added++;
