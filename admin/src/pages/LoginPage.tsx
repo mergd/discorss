@@ -9,7 +9,9 @@ export function LoginPage() {
             ? 'Discord authorization was cancelled.'
             : error === 'oauth_failed'
               ? 'Sign-in failed. Check OAuth settings and try again.'
-              : null;
+              : error === 'oauth_not_configured'
+                ? 'OAuth is not configured on the server. Add DISCORD_CLIENT_SECRET to Railway (Discord Developer Portal → OAuth2 → Client Secret).'
+                : null;
 
     return (
         <div className="login-page">

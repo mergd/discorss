@@ -14,6 +14,7 @@ import {
     getDiscordOAuthUrl,
 } from '../services/discord-oauth-service.js';
 import { env } from '../utils/env.js';
+import { getAdminOAuthMissingVars, isAdminOAuthConfigured } from '../utils/admin-oauth.js';
 import { Controller } from './controller.js';
 
 const OAUTH_STATE_COOKIE = 'discorss_oauth_state';
@@ -42,13 +43,26 @@ export class AuthController implements Controller {
     public router: Router = router();
 
     public register(): void {
+        this.router.get('/status', (_req, res) => this.getStatus(res));
         this.router.get('/discord', (req, res) => this.startDiscordOAuth(req, res));
         this.router.get('/callback', (req, res) => this.handleCallback(req, res));
         this.router.get('/me', (req, res) => this.getMe(req, res));
         this.router.post('/logout', (req, res) => this.logout(req, res));
     }
 
+    private getStatus(res: Response): void {
+        res.json({
+            configured: isAdminOAuthConfigured(),
+            missing: getAdminOAuthMissingVars(),
+        });
+    }
+
     private startDiscordOAuth(_req: Request, res: Response): void {
+        if (!isAdminOAuthConfigured()) {
+            res.redirect('/?error=oauth_not_configured');
+            return;
+        }
+
         const state = randomBytes(16).toString('hex');
         res.setHeader('Set-Cookie', setOAuthStateCookie(state));
         res.redirect(getDiscordOAuthUrl(state));

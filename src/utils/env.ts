@@ -25,3 +25,11 @@ export const env = {
     ADMIN_SESSION_SECRET: getEnvVar('ADMIN_SESSION_SECRET', true),
     ADMIN_OAUTH_REDIRECT_URI: getEnvVar('ADMIN_OAUTH_REDIRECT_URI', true),
 };
+
+export function isAdminOAuthConfigured(): boolean {
+    return !!(
+        env.DISCORD_CLIENT_SECRET &&
+        env.ADMIN_SESSION_SECRET &&
+        env.ADMIN_OAUTH_REDIRECT_URI
+    );
+}

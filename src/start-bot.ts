@@ -1,8 +1,11 @@
 import { REST } from '@discordjs/rest';
 import { Options, Partials } from 'discord.js';
 import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { shutdownPostHog } from './utils/analytics.js';
-import { env } from './utils/env.js';
+import { env, isAdminOAuthConfigured } from './utils/env.js';
 
 import { Button } from './buttons/index.js';
 import {
@@ -56,6 +59,11 @@ import { SingleClientBroadcast } from './utils/single-client-broadcast.js';
 const require = createRequire(import.meta.url);
 let Config = require('../config/config.json');
 let Logs = require('../lang/logs.json');
+
+const adminDist = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../admin/dist'
+);
 
 // Load sensitive values from env
 Config.client.id = env.DISCORD_CLIENT_ID;
@@ -149,9 +157,16 @@ async function start(): Promise<void> {
 
     const apiControllers: Controller[] = [new ServerCountController(client)];
 
-    if (env.DISCORD_CLIENT_SECRET && env.ADMIN_SESSION_SECRET && env.ADMIN_OAUTH_REDIRECT_URI) {
-        apiControllers.push(new AuthController(), new AdminApiController(client));
-        Logger.info('[StartBot] Admin web UI enabled');
+    if (existsSync(adminDist)) {
+        apiControllers.push(new AuthController());
+        if (isAdminOAuthConfigured()) {
+            apiControllers.push(new AdminApiController(client));
+            Logger.info('[StartBot] Admin web UI enabled');
+        } else {
+            Logger.warn(
+                '[StartBot] Admin UI is served but OAuth is not configured. Set DISCORD_CLIENT_SECRET, ADMIN_SESSION_SECRET, and ADMIN_OAUTH_REDIRECT_URI on the host.'
+            );
+        }
     }
 
     const api = new Api(apiControllers);
