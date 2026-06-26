@@ -211,6 +211,101 @@ button {
     line-height: 1.5;
 }
 
+.login-legal {
+    margin: 1.25rem 0 0 !important;
+    font-size: 0.82rem;
+}
+
+.login-legal a {
+    color: var(--text-muted);
+}
+
+.login-legal a:hover {
+    color: var(--text);
+}
+
+.legal-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.legal-header {
+    margin-bottom: 2rem;
+}
+
+.legal-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem 2rem 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.legal-card > h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.75rem;
+    letter-spacing: -0.03em;
+}
+
+.legal-updated {
+    margin: 0 0 1.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.legal-body h3 {
+    margin: 1.5rem 0 0.6rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.legal-body p,
+.legal-body ul {
+    margin: 0 0 1rem;
+    color: var(--text-muted);
+    line-height: 1.65;
+    font-size: 0.95rem;
+}
+
+.legal-body ul {
+    padding-left: 1.25rem;
+}
+
+.legal-body li {
+    margin-bottom: 0.5rem;
+}
+
+.legal-body a {
+    color: #a5aeff;
+}
+
+.legal-body a:hover {
+    color: var(--text);
+}
+
+.legal-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+
+.legal-footer a {
+    color: var(--text-muted);
+}
+
+.legal-footer a:hover {
+    color: var(--text);
+}
+
+.legal-footer span {
+    color: var(--border);
+}
+
 .login-error {
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;

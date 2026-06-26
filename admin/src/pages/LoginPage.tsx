@@ -23,6 +23,11 @@ export function LoginPage() {
                 <a href="/auth/discord" className="btn btn-primary" style={{ width: '100%' }}>
                     Continue with Discord
                 </a>
+                <p className="login-legal">
+                    <a href="/terms">Terms</a>
+                    <span> · </span>
+                    <a href="/privacy">Privacy</a>
+                </p>
             </div>
         </div>
     );

@@ -5,6 +5,8 @@ import { Layout } from './components/Layout';
 import { GuildPage } from './pages/GuildPage';
 import { GuildsPage } from './pages/GuildsPage';
 import { LoginPage } from './pages/LoginPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
 import type { AuthUser } from './types';
 
 export default function App() {
@@ -27,6 +29,8 @@ export default function App() {
         return (
             <Routes>
                 <Route path="/" element={<LoginPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         );
@@ -34,6 +38,8 @@ export default function App() {
 
     return (
         <Routes>
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
             <Route element={<Layout user={user} />}>
                 <Route path="/guilds" element={<GuildsPage />} />
                 <Route path="/guilds/:guildId" element={<GuildPage />} />
