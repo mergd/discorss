@@ -20,6 +20,7 @@
         "node_modules",
         "tests",
         "workers",
+        "admin",
         "src/drizzle.config.ts",
         "disable",
         "cron-restart.js"

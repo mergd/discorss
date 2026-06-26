@@ -1,4 +1,6 @@
 export { Controller } from './controller.js';
+export { AdminApiController } from './admin-api-controller.js';
+export { AuthController } from './auth-controller.js';
 export { GuildsController } from './guilds-controller.js';
 export { ServerCountController } from './server-count-controller.js';
 export { ShardsController } from './shards-controller.js';

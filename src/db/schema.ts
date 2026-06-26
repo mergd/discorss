@@ -47,6 +47,7 @@ export const feeds = pgTable('feeds', {
     disableFailureNotifications: boolean('disable_failure_notifications').notNull().default(false), // Skip failure threshold notifications
     disabled: boolean('disabled').notNull().default(false), // Completely disable feed polling (auto-set for dead feeds)
     language: text('language'), // Language code for summaries (e.g., 'en', 'es', 'fr', 'de', etc.) - overrides guild language
+    skipYoutubeShorts: boolean('skip_youtube_shorts'), // null = default (on for YouTube feeds)
 });
 
 // Table for storing individual feed failure events (for rolling 24hr checks)

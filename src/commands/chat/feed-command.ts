@@ -1596,6 +1596,7 @@ ${linkLine}${snippet}`;
                                 ignoreErrors: false,
                                 disableFailureNotifications: true, // Enable quiet failures for YouTube feeds
                                 disabled: false,
+                                skipYoutubeShorts: true,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);

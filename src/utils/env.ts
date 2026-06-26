@@ -21,4 +21,7 @@ export const env = {
     POSTHOG_API_KEY: getEnvVar('POSTHOG_API_KEY', true),
     FETCH_PROXY_URL: getEnvVar('FETCH_PROXY_URL', true),
     FETCH_PROXY_SECRET: getEnvVar('FETCH_PROXY_SECRET', true),
+    DISCORD_CLIENT_SECRET: getEnvVar('DISCORD_CLIENT_SECRET', true),
+    ADMIN_SESSION_SECRET: getEnvVar('ADMIN_SESSION_SECRET', true),
+    ADMIN_OAUTH_REDIRECT_URI: getEnvVar('ADMIN_OAUTH_REDIRECT_URI', true),
 };

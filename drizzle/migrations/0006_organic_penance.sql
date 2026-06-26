@@ -1,0 +1,1 @@
+ALTER TABLE "feeds" ADD COLUMN "skip_youtube_shorts" boolean;

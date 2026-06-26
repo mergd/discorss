@@ -26,6 +26,8 @@ COPY --from=deps /usr/src/app/node_modules ./node_modules
 COPY . .
 # Run the build script defined in package.json
 RUN bun run build
+# Build admin UI
+RUN cd admin && bun install && bun run build
 
 # ---- Production Stage ----
 # Create the final, smaller production image
@@ -38,6 +40,7 @@ COPY package.json ./
 COPY bun.lockb* ./
 COPY --from=deps /usr/src/app/node_modules ./node_modules
 COPY --from=build /usr/src/app/dist ./dist
+COPY --from=build /usr/src/app/admin/dist ./admin/dist
 COPY config ./config
 COPY lang ./lang
 # Copy drizzle config needed for migrations

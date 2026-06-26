@@ -38,11 +38,15 @@
         "db:migrate": "bunx drizzle-kit migrate --config=src/drizzle.config.ts",
         "db:backup": "bun run build && bun --enable-source-maps dist/scripts/backup-db.js",
         "db:restore": "bun run build && bun --enable-source-maps dist/scripts/restore-db.js",
+        "db:restore-news": "bun run src/scripts/restore-guild-news-feeds.ts",
         "docker:build": "docker build -t discord-bot-rss . && docker run -d --name discord-bot-rss discord-bot-rss",
         "docker:run": "docker start discord-bot-rss",
         "worker:rss-fetch:deploy": "cd workers/rss-fetch && bun run deploy",
         "worker:rss-fetch:dev": "cd workers/rss-fetch && bun run dev",
-        "worker:rss-fetch:typecheck": "cd workers/rss-fetch && bun run typecheck"
+        "worker:rss-fetch:typecheck": "cd workers/rss-fetch && bun run typecheck",
+        "admin:dev": "cd admin && bun run dev",
+        "admin:build": "cd admin && bun install && bun run build",
+        "admin:preview": "cd admin && bun run preview"
     },
     "dependencies": {
         "@discordjs/rest": "^2.2.0",

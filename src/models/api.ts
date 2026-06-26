@@ -1,10 +1,16 @@
 import express, { Express } from 'express';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import util from 'node:util';
+import { existsSync } from 'node:fs';
 
 import { Controller } from '../controllers/index.js';
 import { checkAuth, handleError } from '../middleware/index.js';
 import { Logger } from '../services/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ADMIN_DIST = path.resolve(__dirname, '../../admin/dist');
 
 const require = createRequire(import.meta.url);
 let Config = require('../../config/config.json');
@@ -16,9 +22,11 @@ export class Api {
 
     constructor(public controllers: Controller[]) {
         this.app = express();
+        this.app.set('trust proxy', 1);
         this.app.use(express.json());
         this.setupHealthcheck();
         this.setupControllers();
+        this.setupAdminStatic();
         this.app.use(handleError());
     }
 
@@ -78,5 +86,27 @@ export class Api {
             controller.register();
             this.app.use(controller.path, controller.router);
         }
+    }
+
+    private setupAdminStatic(): void {
+        if (!existsSync(ADMIN_DIST)) {
+            return;
+        }
+
+        this.app.use(express.static(ADMIN_DIST));
+
+        this.app.get('*', (req, res, next) => {
+            if (
+                req.path.startsWith('/api') ||
+                req.path.startsWith('/auth') ||
+                req.path === '/health' ||
+                req.path.startsWith('/server-count')
+            ) {
+                next();
+                return;
+            }
+
+            res.sendFile(path.join(ADMIN_DIST, 'index.html'));
+        });
     }
 }

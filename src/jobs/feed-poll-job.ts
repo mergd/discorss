@@ -34,7 +34,7 @@ import {
     fetchPageContent,
     summarizeContent,
 } from '../utils/feed-summarizer.js';
-import { isYouTubeFeed } from '../utils/feed-utils.js';
+import { isYouTubeFeed, isYouTubeShortLink, shouldSkipYouTubeShorts } from '../utils/feed-utils.js';
 import { parseFeedUrl, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
@@ -522,6 +522,13 @@ export class FeedPollJob extends Job {
 
                 if (!currentItemGuid) continue; // Skip if no GUID or Link
                 if (i === 0) latestItemGuid = currentItemGuid;
+
+                if (
+                    shouldSkipYouTubeShorts(feedConfig) &&
+                    isYouTubeShortLink(item.link)
+                ) {
+                    continue;
+                }
 
                 // Stop if we hit the last known GUID (primary check)
                 if (lastKnownGuid && currentItemGuid === lastKnownGuid) break;

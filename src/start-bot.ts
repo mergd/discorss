@@ -36,7 +36,12 @@ import { CustomClient } from './extensions/index.js';
 import { FeedPollJob, Job } from './jobs/index.js';
 import { Api } from './models/api.js';
 import { Bot } from './models/bot.js';
-import { ServerCountController } from './controllers/index.js';
+import {
+    AdminApiController,
+    AuthController,
+    Controller,
+    ServerCountController,
+} from './controllers/index.js';
 import { Reaction } from './reactions/index.js';
 import { JobRegistry } from './services/job-registry.js';
 import {
@@ -142,9 +147,14 @@ async function start(): Promise<void> {
         process.exit();
     }
 
-    // Start lightweight API for health checks and server count
-    const serverCountController = new ServerCountController(client);
-    const api = new Api([serverCountController]);
+    const apiControllers: Controller[] = [new ServerCountController(client)];
+
+    if (env.DISCORD_CLIENT_SECRET && env.ADMIN_SESSION_SECRET && env.ADMIN_OAUTH_REDIRECT_URI) {
+        apiControllers.push(new AuthController(), new AdminApiController(client));
+        Logger.info('[StartBot] Admin web UI enabled');
+    }
+
+    const api = new Api(apiControllers);
 
     await bot.start();
     await api.start();

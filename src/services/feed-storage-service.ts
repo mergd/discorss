@@ -5,6 +5,7 @@ import { MAX_RECENT_LINKS } from '../constants/index.js';
 import { db } from '../db/index.js';
 import { categories, feedFailures, feeds, guilds } from '../db/schema.js';
 import { posthog } from '../utils/analytics.js';
+import { isYouTubeFeed } from '../utils/feed-utils.js';
 // Interface for Feed Configuration
 export interface FeedConfig {
     id: string;
@@ -31,6 +32,7 @@ export interface FeedConfig {
     disableFailureNotifications: boolean;
     disabled: boolean;
     language?: string | null; // Language code for summaries - overrides guild language
+    skipYoutubeShorts?: boolean | null;
 }
 
 // Lightweight interface for feed polling - excludes large text fields to save memory
@@ -59,6 +61,7 @@ export interface FeedRuntimeConfig {
     disableFailureNotifications: boolean;
     disabled: boolean;
     language?: string | null;
+    skipYoutubeShorts?: boolean | null;
 }
 
 // Interface for Category Configuration
@@ -103,6 +106,12 @@ export class FeedStorageService {
             frequencyOverrideMinutes: feedData.frequencyOverrideMinutes ?? null,
             summarize: feedData.summarize ?? false,
             useArchiveLinks: feedData.useArchiveLinks ?? false,
+            skipYoutubeShorts:
+                feedData.skipYoutubeShorts !== undefined
+                    ? feedData.skipYoutubeShorts
+                    : isYouTubeFeed(feedData)
+                      ? true
+                      : null,
             // createdAt is handled by defaultNow() in pg schema
             // consecutiveFailures defaults to 0 in pg schema
             recentLinks: JSON.stringify([]), // Initialize with empty JSON array string
@@ -351,6 +360,7 @@ export class FeedStorageService {
                     disableFailureNotifications: feeds.disableFailureNotifications,
                     disabled: feeds.disabled,
                     language: feeds.language,
+                    skipYoutubeShorts: feeds.skipYoutubeShorts,
                 })
                 .from(feeds)
                 .where(eq(feeds.id, feedId))
@@ -534,6 +544,7 @@ export class FeedStorageService {
             disableFailureNotifications?: boolean | null;
             disabled?: boolean | null;
             language?: string | null;
+            skipYoutubeShorts?: boolean | null;
             // Note: recentLinks is handled separately by updateRecentLinks
         }
     ): Promise<boolean> {
@@ -560,6 +571,8 @@ export class FeedStorageService {
             }
         }
         if ('language' in updates) valuesToUpdate.language = updates.language;
+        if ('skipYoutubeShorts' in updates)
+            valuesToUpdate.skipYoutubeShorts = updates.skipYoutubeShorts;
 
         if (Object.keys(valuesToUpdate).length === 0) {
             console.log(`[FeedStorageService] No details provided to update for feed ${feedId}`);
