@@ -10,5 +10,6 @@ export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 15; // Increased from 5 for more aggressive initial backoff
 export const MAX_MINUTES = 1440; // Increased from 360 (6 hours) to 24 hours max
 export const MODEL_NAME = 'google/gemini-2.5-flash-lite';
-export const FALLBACK_MODEL_NAME = 'qwen/qwen3.5-9b';
+/** Specific free model — avoid openrouter/free router (unpredictable junk outputs) */
+export const FALLBACK_MODEL_NAME = 'meta-llama/llama-3.3-70b-instruct:free';
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5; // When one feed in category fails, apply 50% of its backoff to others
