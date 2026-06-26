@@ -14,6 +14,6 @@ export function handleError(): ErrorRequestHandler {
                 .replaceAll('{URL}', req.url),
             error
         );
-        res.status(500).json({ error: true, message: error.message });
+        res.status(500).json({ error: 'internal_error', message: error.message });
     };
 }

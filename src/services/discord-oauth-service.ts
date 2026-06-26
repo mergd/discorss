@@ -67,15 +67,25 @@ export async function fetchOAuthUser(accessToken: string): Promise<DiscordOAuthU
 }
 
 export async function fetchOAuthGuilds(accessToken: string): Promise<DiscordOAuthGuild[]> {
-    const res = await fetch(`${DISCORD_API}/users/@me/guilds`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch(`${DISCORD_API}/users/@me/guilds`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
 
-    if (!res.ok) {
+        if (res.ok) {
+            return (await res.json()) as DiscordOAuthGuild[];
+        }
+
+        if (res.status === 429 && attempt === 0) {
+            const retryAfter = Number(res.headers.get('retry-after') || '1');
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            continue;
+        }
+
         throw new Error(`Failed to fetch Discord guilds (${res.status})`);
     }
 
-    return (await res.json()) as DiscordOAuthGuild[];
+    throw new Error('Failed to fetch Discord guilds');
 }
 
 export function filterManageableGuilds(

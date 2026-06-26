@@ -380,6 +380,12 @@ button {
     letter-spacing: -0.02em;
 }
 
+.section-subtitle {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
 .filters {
     display: flex;
     gap: 0.75rem;

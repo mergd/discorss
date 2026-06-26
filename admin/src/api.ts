@@ -11,8 +11,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Request failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const message =
+            typeof body.message === 'string'
+                ? body.message
+                : typeof body.error === 'string'
+                  ? body.error
+                  : `Request failed (${res.status})`;
+        throw new Error(message);
     }
 
     if (res.status === 204) return undefined as T;

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { addFeed, getChannels, getFeeds } from '../api';
 import { AddFeedModal, FeedRow } from '../components/FeedUI';
 import type { Channel, Feed } from '../types';
 
 export function GuildPage() {
     const { guildId } = useParams<{ guildId: string }>();
+    const location = useLocation();
+    const guildName = (location.state as { guildName?: string } | null)?.guildName;
     const [feeds, setFeeds] = useState<Feed[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
     const [channelFilter, setChannelFilter] = useState('');
@@ -23,7 +25,7 @@ export function GuildPage() {
                 getFeeds(guildId, channelFilter || undefined),
             ]);
             setChannels(channelData.channels);
-            setFeeds(feedData.feeds);
+            setFeeds(feedData.feeds ?? []);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load');
         } finally {
@@ -48,7 +50,14 @@ export function GuildPage() {
                 ← All servers
             </Link>
             <div className="section-header">
-                <h2>Feeds</h2>
+                <div>
+                    <h2>{guildName ? guildName : 'Feeds'}</h2>
+                    {!loading && !error && (
+                        <p className="section-subtitle">
+                            {feeds.length} feed{feeds.length === 1 ? '' : 's'}
+                        </p>
+                    )}
+                </div>
                 <div className="filters">
                     <select
                         className="select"

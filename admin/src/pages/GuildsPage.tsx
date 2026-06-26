@@ -30,7 +30,12 @@ export function GuildsPage() {
             ) : (
                 <div className="guild-grid">
                     {guilds.map(guild => (
-                        <Link key={guild.id} to={`/guilds/${guild.id}`} className="guild-card">
+                        <Link
+                            key={guild.id}
+                            to={`/guilds/${guild.id}`}
+                            state={{ guildName: guild.name }}
+                            className="guild-card"
+                        >
                             {guild.iconUrl ? (
                                 <img src={guild.iconUrl} alt="" />
                             ) : (

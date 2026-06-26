@@ -8,10 +8,7 @@ import {
 } from '../constants/misc.js';
 import { requireAdminSession } from '../middleware/require-admin-session.js';
 import { FeedStorageService } from '../services/feed-storage-service.js';
-import {
-    fetchOAuthGuilds,
-    filterManageableGuilds,
-} from '../services/discord-oauth-service.js';
+import { getManageableGuilds, hasGuildAccess } from '../services/admin-guild-access.js';
 import { detectAndConvertTwitterUrl } from '../utils/twitter-url.js';
 import { parseFeedUrl } from '../utils/rss-parser.js';
 import { Controller } from './controller.js';
@@ -50,16 +47,11 @@ export class AdminApiController implements Controller {
     }
 
     private async assertGuildAccess(req: Request, guildId: string): Promise<boolean> {
-        const botGuildIds = new Set(this.client.guilds.cache.map(g => g.id));
-        const userGuilds = await fetchOAuthGuilds(req.adminSession!.accessToken);
-        const manageable = filterManageableGuilds(userGuilds, botGuildIds);
-        return manageable.some(g => g.id === guildId);
+        return hasGuildAccess(req.adminSession!, this.client, guildId);
     }
 
     private async listGuilds(req: Request, res: Response): Promise<void> {
-        const botGuildIds = new Set(this.client.guilds.cache.map(g => g.id));
-        const userGuilds = await fetchOAuthGuilds(req.adminSession!.accessToken);
-        const manageable = filterManageableGuilds(userGuilds, botGuildIds);
+        const manageable = await getManageableGuilds(req.adminSession!, this.client);
 
         res.json({
             guilds: manageable.map(g => ({
