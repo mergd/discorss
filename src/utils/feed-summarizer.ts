@@ -213,7 +213,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
 }
 
 /**
- * Summarizes the given content using OpenRouter free models.
+ * Summarizes the given content using OpenRouter models.
  * Handles potential errors and structures the prompt carefully.
  */
 export async function summarizeContent(
@@ -257,6 +257,16 @@ export async function summarizeContent(
 type ModelCallResult =
     | { ok: true; text: string; model: string; durationMs: number; inputTokens: number; outputTokens: number; totalTokens: number }
     | { ok: false; retryable: boolean; error: string };
+
+function isLowQualitySummary(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length < 25) return true;
+    if (/^user safety:\s*safe\b/i.test(trimmed)) return true;
+    if (/article summary\s*\(~?\d+\s*min read\):/i.test(trimmed) && trimmed.length < 100) {
+        return true;
+    }
+    return false;
+}
 
 async function callModel(
     modelName: string,
@@ -460,6 +470,20 @@ ${truncatedContent}
                 groups: guildId ? { guild: guildId } : undefined,
             });
             return text;
+        }
+
+        if (isLowQualitySummary(text)) {
+            Logger.warn(
+                `[Summarizer] Rejected low-quality ${contentType} summary from ${modelName} for ${sourceLabel} (attempt ${attemptLabel}): ${text.substring(0, 120)}`
+            );
+            posthog?.capture({
+                distinctId,
+                event: 'summarization_low_quality',
+                properties: { model: modelName, isFallback, sourceUrl, contentType, summaryPreview: text.substring(0, 200), guildId: guildId || undefined },
+                groups: guildId ? { guild: guildId } : undefined,
+            });
+            if (i < modelsToTry.length - 1) continue;
+            return 'Could not generate summary: Insufficient content.';
         }
 
         posthog?.capture({
