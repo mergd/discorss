@@ -11,11 +11,15 @@
         "moduleDetection": "force",
         "noEmit": true,
         "jsx": "react-jsx",
+        "baseUrl": ".",
+        "paths": {
+            "styled-system/*": ["./styled-system/*"]
+        },
         "strict": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
         "noUncheckedSideEffectImports": true
     },
-    "include": ["src"]
+    "include": ["src", "styled-system"]
 }

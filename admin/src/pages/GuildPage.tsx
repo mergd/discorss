@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { Button } from 'baseui/button';
+import { Select, type Value } from 'baseui/select';
 import { addFeed, getChannels, getFeeds } from '../api';
 import { AddFeedModal, FeedRow } from '../components/FeedUI';
+import { EmptyState, ErrorBanner, Loading, SectionHeader } from '../components/ui';
 import type { Channel, Feed } from '../types';
+import { css } from 'styled-system/css';
+import { flex } from 'styled-system/patterns';
 
 export function GuildPage() {
     const { guildId } = useParams<{ guildId: string }>();
@@ -42,55 +47,70 @@ export function GuildPage() {
         [channels]
     );
 
+    const filterOptions = useMemo(
+        () => channels.map(ch => ({ id: ch.id, label: `#${ch.name}` })),
+        [channels]
+    );
+
+    const filterValue: Value = channelFilter
+        ? filterOptions.filter(o => o.id === channelFilter)
+        : [];
+
     if (!guildId) return null;
 
     return (
         <>
-            <Link to="/guilds" className="back-link">
+            <Link
+                to="/guilds"
+                className={css({
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '1',
+                    mb: '4',
+                    fontSize: '0.9rem',
+                    color: 'textMuted',
+                    _hover: { color: 'text' },
+                })}
+            >
                 ← All servers
             </Link>
-            <div className="section-header">
-                <div>
-                    <h2>{guildName ? guildName : 'Feeds'}</h2>
-                    {!loading && !error && (
-                        <p className="section-subtitle">
-                            {feeds.length} feed{feeds.length === 1 ? '' : 's'}
-                        </p>
-                    )}
-                </div>
-                <div className="filters">
-                    <select
-                        className="select"
-                        value={channelFilter}
-                        onChange={e => setChannelFilter(e.target.value)}
-                    >
-                        <option value="">All channels</option>
-                        {channels.map(ch => (
-                            <option key={ch.id} value={ch.id}>
-                                #{ch.name}
-                            </option>
-                        ))}
-                    </select>
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => setShowAdd(true)}
-                        disabled={channels.length === 0}
-                    >
-                        Add feed
-                    </button>
-                </div>
-            </div>
 
-            {error && <div className="error-banner">{error}</div>}
+            <SectionHeader
+                title={guildName ? guildName : 'Feeds'}
+                subtitle={
+                    !loading && !error
+                        ? `${feeds.length} feed${feeds.length === 1 ? '' : 's'}`
+                        : undefined
+                }
+                actions={
+                    <>
+                        <div className={css({ minW: '200px' })}>
+                            <Select
+                                size="compact"
+                                options={filterOptions}
+                                value={filterValue}
+                                placeholder="All channels"
+                                onChange={({ value }) =>
+                                    setChannelFilter(value.length ? String(value[0].id) : '')
+                                }
+                            />
+                        </div>
+                        <Button onClick={() => setShowAdd(true)} disabled={channels.length === 0}>
+                            Add feed
+                        </Button>
+                    </>
+                }
+            />
+
+            {error && <ErrorBanner>{error}</ErrorBanner>}
             {loading ? (
-                <div className="loading">Loading feeds…</div>
+                <Loading>Loading feeds…</Loading>
             ) : feeds.length === 0 ? (
-                <div className="empty-state">
+                <EmptyState>
                     No feeds yet. Add one to start posting RSS updates to Discord.
-                </div>
+                </EmptyState>
             ) : (
-                <div className="feed-list">
+                <div className={flex({ direction: 'column', gap: '2.5' })}>
                     {feeds.map(feed => (
                         <FeedRow
                             key={feed.id}

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Avatar } from 'baseui/avatar';
 import { getGuilds } from '../api';
 import type { Guild } from '../types';
+import { css } from 'styled-system/css';
+import { grid } from 'styled-system/patterns';
+import { avatarOverrides, EmptyState, ErrorBanner, Loading, SectionHeader } from '../components/ui';
 
 export function GuildsPage() {
     const [guilds, setGuilds] = useState<Guild[]>([]);
@@ -15,35 +19,56 @@ export function GuildsPage() {
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) return <div className="loading">Loading servers…</div>;
-    if (error) return <div className="error-banner">{error}</div>;
+    if (loading) return <Loading>Loading servers…</Loading>;
+    if (error) return <ErrorBanner>{error}</ErrorBanner>;
 
     return (
         <>
-            <div className="section-header">
-                <h2>Your servers</h2>
-            </div>
+            <SectionHeader title="Your servers" />
             {guilds.length === 0 ? (
-                <div className="empty-state">
-                    No servers found where you have Manage Server permission and Discorss is installed.
-                </div>
+                <EmptyState>
+                    No servers found where you have Manage Server permission and Discorss is
+                    installed.
+                </EmptyState>
             ) : (
-                <div className="guild-grid">
-                    {guilds.map(guild => (
+                <div
+                    className={grid({
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+                        gap: '3',
+                    })}
+                >
+                    {guilds.map((guild, i) => (
                         <Link
                             key={guild.id}
                             to={`/guilds/${guild.id}`}
                             state={{ guildName: guild.name }}
-                            className="guild-card"
+                            style={{ animationDelay: `${i * 40}ms` }}
+                            className={css({
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3.5',
+                                p: '3.5',
+                                bg: 'surface',
+                                border: '1px solid token(colors.border)',
+                                borderRadius: 'md',
+                                animation: 'fadeUp 0.3s ease both',
+                                transition: 'border-color 0.15s, box-shadow 0.2s, transform 0.15s',
+                                _hover: {
+                                    borderColor: 'rgba(88, 101, 242, 0.4)',
+                                    boxShadow: 'cardHover',
+                                    transform: 'translateY(-2px)',
+                                },
+                            })}
                         >
-                            {guild.iconUrl ? (
-                                <img src={guild.iconUrl} alt="" />
-                            ) : (
-                                <div className="guild-placeholder">
-                                    {guild.name[0]?.toUpperCase()}
-                                </div>
-                            )}
-                            <h3>{guild.name}</h3>
+                            <Avatar
+                                name={guild.name}
+                                size="44px"
+                                src={guild.iconUrl ?? undefined}
+                                overrides={avatarOverrides('14px')}
+                            />
+                            <h3 className={css({ m: 0, fontSize: '0.95rem', fontWeight: 600 })}>
+                                {guild.name}
+                            </h3>
                         </Link>
                     ))}
                 </div>
