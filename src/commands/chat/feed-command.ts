@@ -213,6 +213,8 @@ export class FeedCommand implements Command {
                         const summarize = intr.options.getBoolean('summarize') ?? false;
                         const useArchiveLinks =
                             intr.options.getBoolean('use_archive_links') ?? false;
+                        const suppressLinkPreview =
+                            intr.options.getBoolean('suppress_link_preview') ?? false;
                         const languageInput = intr.options.getString('language');
                         const language = validateLanguageCode(languageInput);
 
@@ -410,6 +412,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes: frequency,
                                 summarize: summarize,
                                 useArchiveLinks: useArchiveLinks,
+                                suppressLinkPreview: suppressLinkPreview,
                                 language: language || null,
                                 ignoreErrors: false,
                                 disableFailureNotifications: false,
@@ -747,6 +750,8 @@ export class FeedCommand implements Command {
                         const newFrequency = intr.options.getInteger('frequency');
                         const newSummarize = intr.options.getBoolean('summarize');
                         const newUseArchiveLinks = intr.options.getBoolean('use_archive_links');
+                        const newSuppressLinkPreview =
+                            intr.options.getBoolean('suppress_link_preview');
                         const newEnabled = intr.options.getBoolean('enabled');
                         const newLanguageInput = intr.options.getString('language');
                         // Empty string or whitespace means clear the language (null)
@@ -787,12 +792,13 @@ export class FeedCommand implements Command {
                             newFrequency === null &&
                             newSummarize === null &&
                             newUseArchiveLinks === null &&
+                            newSuppressLinkPreview === null &&
                             newLanguage === null &&
                             newEnabled === null
                         ) {
                             await InteractionUtils.editReply(
                                 intr,
-                                'Please provide at least one detail to update (nickname, category, frequency, summarize, use_archive_links, language, or enabled).'
+                                'Please provide at least one detail to update (nickname, category, frequency, summarize, use_archive_links, suppress_link_preview, language, or enabled).'
                             );
                             return;
                         }
@@ -824,6 +830,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes?: number | null;
                                 summarize?: boolean | null;
                                 useArchiveLinks?: boolean | null;
+                                suppressLinkPreview?: boolean | null;
                                 language?: string | null;
                                 disabled?: boolean | null;
                                 lastArticleSummary?: string | null;
@@ -836,6 +843,7 @@ export class FeedCommand implements Command {
                                 frequencyOverrideMinutes: targetFeed.frequencyOverrideMinutes,
                                 summarize: targetFeed.summarize,
                                 useArchiveLinks: targetFeed.useArchiveLinks,
+                                suppressLinkPreview: targetFeed.suppressLinkPreview,
                                 disabled: targetFeed.disabled,
                             };
 
@@ -850,6 +858,8 @@ export class FeedCommand implements Command {
                                 updates.summarize = newSummarize;
                             if (intr.options.getBoolean('use_archive_links') !== null)
                                 updates.useArchiveLinks = newUseArchiveLinks;
+                            if (intr.options.getBoolean('suppress_link_preview') !== null)
+                                updates.suppressLinkPreview = newSuppressLinkPreview;
                             if (intr.options.getString('language') !== null)
                                 updates.language = newLanguage; // Already validated above
                             if (intr.options.getBoolean('enabled') !== null)
@@ -891,6 +901,11 @@ export class FeedCommand implements Command {
                                         changes.useArchiveLinks = {
                                             old: originalValues.useArchiveLinks,
                                             new: updates.useArchiveLinks,
+                                        };
+                                    if (updates.suppressLinkPreview !== undefined)
+                                        changes.suppressLinkPreview = {
+                                            old: originalValues.suppressLinkPreview,
+                                            new: updates.suppressLinkPreview,
                                         };
                                     if (updates.disabled !== undefined)
                                         changes.enabled = {
@@ -1593,6 +1608,7 @@ ${linkLine}${snippet}`;
                                 frequencyOverrideMinutes: null, // YT feeds use default/category frequency
                                 summarize: summarize,
                                 useArchiveLinks: false, // YouTube feeds don't need archive links
+                                suppressLinkPreview: false,
                                 ignoreErrors: false,
                                 disableFailureNotifications: true, // Enable quiet failures for YouTube feeds
                                 disabled: false,

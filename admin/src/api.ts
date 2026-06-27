@@ -57,6 +57,7 @@ export async function addFeed(
         nickname?: string;
         summarize?: boolean;
         useArchiveLinks?: boolean;
+        suppressLinkPreview?: boolean;
         category?: string;
         frequencyOverrideMinutes?: number | null;
     }
@@ -75,6 +76,7 @@ export async function updateFeed(
         nickname?: string | null;
         summarize?: boolean;
         useArchiveLinks?: boolean;
+        suppressLinkPreview?: boolean;
         disabled?: boolean;
         category?: string | null;
         frequencyOverrideMinutes?: number | null;

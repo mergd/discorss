@@ -902,6 +902,7 @@ export class FeedPollJob extends Job {
                         guildAnnouncementChannelType,
                         feedId,
                         useArchiveLinks, // Pass archive links setting
+                        suppressLinkPreview,
                         paywalledDomainsList, // Receive the list of domains
                         messageFlags, // Import MessageFlags
                     } = context;
@@ -1019,7 +1020,10 @@ export class FeedPollJob extends Job {
                                 await (channel as TextChannel | NewsChannel).send({
                                     content: contentToSend,
                                     allowedMentions: { parse: [] },
-                                    flags: hasPaywalledLink ? messageFlags : undefined,
+                                    flags:
+                                        hasPaywalledLink || suppressLinkPreview
+                                            ? messageFlags
+                                            : undefined,
                                 });
 
                                 if (item.link) {
@@ -1082,6 +1086,7 @@ export class FeedPollJob extends Job {
                         guildAnnouncementChannelType: 5, // Use literal value instead of imported constant
                         feedId: feedConfig.id,
                         useArchiveLinks: feedConfig.useArchiveLinks,
+                        suppressLinkPreview: feedConfig.suppressLinkPreview,
                         paywalledDomainsList: Array.from(PAYWALLED_DOMAINS), // Pass the set as an array
                         messageFlags: 4, // MessageFlags.SuppressEmbeds value
                     },

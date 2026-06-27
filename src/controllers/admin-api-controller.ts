@@ -109,7 +109,7 @@ export class AdminApiController implements Controller {
 
     private async addFeed(req: Request, res: Response): Promise<void> {
         const { guildId } = req.params;
-        const { url, channelId, nickname, summarize, useArchiveLinks, category, frequencyOverrideMinutes } =
+        const { url, channelId, nickname, summarize, useArchiveLinks, suppressLinkPreview, category, frequencyOverrideMinutes } =
             req.body ?? {};
 
         if (!(await this.assertGuildAccess(req, guildId))) {
@@ -183,6 +183,7 @@ export class AdminApiController implements Controller {
                 addedBy: req.adminSession!.userId,
                 summarize: Boolean(summarize),
                 useArchiveLinks: Boolean(useArchiveLinks),
+                suppressLinkPreview: Boolean(suppressLinkPreview),
                 frequencyOverrideMinutes: frequencyOverrideMinutes ?? null,
             });
 
@@ -229,6 +230,8 @@ export class AdminApiController implements Controller {
             allowed.frequencyOverrideMinutes = updates.frequencyOverrideMinutes;
         if ('summarize' in updates) allowed.summarize = Boolean(updates.summarize);
         if ('useArchiveLinks' in updates) allowed.useArchiveLinks = Boolean(updates.useArchiveLinks);
+        if ('suppressLinkPreview' in updates)
+            allowed.suppressLinkPreview = Boolean(updates.suppressLinkPreview);
         if ('disabled' in updates) allowed.disabled = Boolean(updates.disabled);
         if ('ignoreErrors' in updates) allowed.ignoreErrors = Boolean(updates.ignoreErrors);
         if ('disableFailureNotifications' in updates)

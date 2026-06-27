@@ -50,6 +50,13 @@
       "when": 1782492969598,
       "tag": "0006_organic_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782604429521,
+      "tag": "0007_easy_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

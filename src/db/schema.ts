@@ -36,6 +36,7 @@ export const feeds = pgTable('feeds', {
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
     summarize: boolean('summarize').notNull().default(false), // AI summarization enabled
     useArchiveLinks: boolean('use_archive_links').notNull().default(false), // Enable archive.is links for paywalled content
+    suppressLinkPreview: boolean('suppress_link_preview').notNull().default(false), // Disable Discord OG link previews
     lastArticleSummary: text('last_article_summary'), // Last article summary (nullable)
     lastCommentsSummary: text('last_comments_summary'), // Last comments summary (nullable)
     // Add the new column for recent links (store as JSON string)

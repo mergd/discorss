@@ -1,0 +1,1 @@
+ALTER TABLE "feeds" ADD COLUMN "suppress_link_preview" boolean DEFAULT false NOT NULL;

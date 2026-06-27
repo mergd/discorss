@@ -61,6 +61,7 @@ async function main() {
                 addedBy: ADDED_BY,
                 summarize: feed.summarize,
                 useArchiveLinks: false,
+                suppressLinkPreview: false,
             });
             console.log(`✅ Added ${feed.nickname} → <#${feed.channelId}> (${id})`);
             added++;

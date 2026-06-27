@@ -7,6 +7,7 @@ export type Feed = {
     category?: string | null;
     summarize: boolean;
     useArchiveLinks: boolean;
+    suppressLinkPreview: boolean;
     disabled: boolean;
     frequencyOverrideMinutes?: number | null;
     consecutiveFailures: number;

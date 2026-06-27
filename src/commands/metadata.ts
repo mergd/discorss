@@ -149,6 +149,12 @@ export const ChatCommandMetadata: {
                         required: false,
                     },
                     {
+                        type: ApplicationCommandOptionType.Boolean,
+                        name: 'suppress_link_preview',
+                        description: 'Disable Discord link previews for posted items (default: off)',
+                        required: false,
+                    },
+                    {
                         type: ApplicationCommandOptionType.String,
                         name: 'language',
                         description: 'Language code for summaries (e.g., en, es, fr, de). Overrides server language.',
@@ -258,6 +264,12 @@ export const ChatCommandMetadata: {
                         type: ApplicationCommandOptionType.Boolean,
                         name: 'use_archive_links',
                         description: 'Enable archive.is links for all links (default: only for paywalled sites)',
+                        required: false,
+                    },
+                    {
+                        type: ApplicationCommandOptionType.Boolean,
+                        name: 'suppress_link_preview',
+                        description: 'Disable Discord link previews for posted items (default: off)',
                         required: false,
                     },
                     {

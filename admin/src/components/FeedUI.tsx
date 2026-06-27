@@ -34,7 +34,7 @@ type FeedRowProps = {
 export function FeedRow({ guildId, feed, channelName, onChanged }: FeedRowProps) {
     const [busy, setBusy] = useState(false);
 
-    async function toggle(field: 'summarize' | 'disabled' | 'useArchiveLinks') {
+    async function toggle(field: 'summarize' | 'disabled' | 'useArchiveLinks' | 'suppressLinkPreview') {
         setBusy(true);
         try {
             await updateFeed(guildId, feed.id, {
@@ -154,6 +154,17 @@ export function FeedRow({ guildId, feed, channelName, onChanged }: FeedRowProps)
                             Archive links
                         </Tag>
                     )}
+                    {feed.suppressLinkPreview && (
+                        <Tag
+                            closeable={false}
+                            size="small"
+                            kind={TAG_KIND.gray}
+                            hierarchy={HIERARCHY.secondary}
+                            overrides={tagOverrides}
+                        >
+                            No preview
+                        </Tag>
+                    )}
                     {feed.consecutiveFailures > 0 && (
                         <Tag
                             closeable={false}
@@ -190,6 +201,13 @@ export function FeedRow({ guildId, feed, channelName, onChanged }: FeedRowProps)
                     onChange={() => toggle('useArchiveLinks')}
                 >
                     Archive
+                </ToggleSwitch>
+                <ToggleSwitch
+                    checked={feed.suppressLinkPreview}
+                    disabled={busy}
+                    onChange={() => toggle('suppressLinkPreview')}
+                >
+                    Hide preview
                 </ToggleSwitch>
                 <ToggleSwitch
                     checked={!feed.disabled}
@@ -263,6 +281,7 @@ type AddFeedModalProps = {
         nickname?: string;
         summarize: boolean;
         useArchiveLinks: boolean;
+        suppressLinkPreview: boolean;
     }) => Promise<void>;
 };
 
@@ -279,6 +298,7 @@ export function AddFeedModal({ channels, onClose, onSubmit }: AddFeedModalProps)
     const [nickname, setNickname] = useState('');
     const [summarize, setSummarize] = useState(false);
     const [useArchiveLinks, setUseArchiveLinks] = useState(false);
+    const [suppressLinkPreview, setSuppressLinkPreview] = useState(false);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -298,6 +318,7 @@ export function AddFeedModal({ channels, onClose, onSubmit }: AddFeedModalProps)
                 nickname: nickname.trim() || undefined,
                 summarize,
                 useArchiveLinks,
+                suppressLinkPreview,
             });
             onClose();
         } catch (err) {
@@ -371,6 +392,14 @@ export function AddFeedModal({ channels, onClose, onSubmit }: AddFeedModalProps)
                             labelPlacement={LABEL_PLACEMENT.right}
                         >
                             Archive.is links
+                        </Checkbox>
+                        <Checkbox
+                            checked={suppressLinkPreview}
+                            onChange={e => setSuppressLinkPreview(e.currentTarget.checked)}
+                            checkmarkType={STYLE_TYPE.toggle_round}
+                            labelPlacement={LABEL_PLACEMENT.right}
+                        >
+                            Hide link preview
                         </Checkbox>
                     </div>
                 </ModalBody>

@@ -22,6 +22,7 @@ export interface FeedConfig {
     lastChecked?: Date | null;
     summarize: boolean;
     useArchiveLinks: boolean;
+    suppressLinkPreview: boolean;
     lastArticleSummary?: string | null;
     lastCommentsSummary?: string | null;
     recentLinks?: string[] | null;
@@ -55,6 +56,7 @@ export interface FeedRuntimeConfig {
     frequencyOverrideMinutes?: number | null;
     summarize: boolean;
     useArchiveLinks: boolean;
+    suppressLinkPreview: boolean;
     recentLinks?: string[] | null;
     backoffUntil?: Date | null;
     ignoreErrors: boolean;
@@ -106,6 +108,7 @@ export class FeedStorageService {
             frequencyOverrideMinutes: feedData.frequencyOverrideMinutes ?? null,
             summarize: feedData.summarize ?? false,
             useArchiveLinks: feedData.useArchiveLinks ?? false,
+            suppressLinkPreview: feedData.suppressLinkPreview ?? false,
             skipYoutubeShorts:
                 feedData.skipYoutubeShorts !== undefined
                     ? feedData.skipYoutubeShorts
@@ -354,6 +357,7 @@ export class FeedStorageService {
                     frequencyOverrideMinutes: feeds.frequencyOverrideMinutes,
                     summarize: feeds.summarize,
                     useArchiveLinks: feeds.useArchiveLinks,
+                    suppressLinkPreview: feeds.suppressLinkPreview,
                     recentLinks: feeds.recentLinks,
                     backoffUntil: feeds.backoffUntil,
                     ignoreErrors: feeds.ignoreErrors,
@@ -538,6 +542,7 @@ export class FeedStorageService {
             frequencyOverrideMinutes?: number | null;
             summarize?: boolean | null; // Use boolean directly
             useArchiveLinks?: boolean | null;
+            suppressLinkPreview?: boolean | null;
             lastArticleSummary?: string | null;
             lastCommentsSummary?: string | null;
             ignoreErrors?: boolean | null;
@@ -556,6 +561,8 @@ export class FeedStorageService {
             valuesToUpdate.frequencyOverrideMinutes = updates.frequencyOverrideMinutes;
         if ('summarize' in updates) valuesToUpdate.summarize = updates.summarize;
         if ('useArchiveLinks' in updates) valuesToUpdate.useArchiveLinks = updates.useArchiveLinks;
+        if ('suppressLinkPreview' in updates)
+            valuesToUpdate.suppressLinkPreview = updates.suppressLinkPreview;
         if ('lastArticleSummary' in updates)
             valuesToUpdate.lastArticleSummary = updates.lastArticleSummary;
         if ('lastCommentsSummary' in updates)
