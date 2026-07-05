@@ -34,7 +34,8 @@ import {
     fetchPageContent,
     summarizeContent,
 } from '../utils/feed-summarizer.js';
-import { isYouTubeFeed, isYouTubeShortLink, shouldSkipYouTubeShorts } from '../utils/feed-utils.js';
+import { isYouTubeFeed, isYouTubeShortLink, shouldSkipYouTubeLivestreams, shouldSkipYouTubeShorts } from '../utils/feed-utils.js';
+import { isYouTubeLiveVideo } from '../utils/youtube-live.js';
 import { parseFeedUrl, resetRSSParser } from '../utils/rss-parser.js';
 import { Job } from './job.js';
 
@@ -528,6 +529,16 @@ export class FeedPollJob extends Job {
                     isYouTubeShortLink(item.link)
                 ) {
                     continue;
+                }
+
+                if (shouldSkipYouTubeLivestreams(feedConfig) && item.link) {
+                    const isLive = await isYouTubeLiveVideo(item.link);
+                    if (isLive) {
+                        Logger.info(
+                            `[FeedPollJob] Skipping YouTube livestream for feed ${feedConfig.id}: ${item.link}`
+                        );
+                        continue;
+                    }
                 }
 
                 // Stop if we hit the last known GUID (primary check)

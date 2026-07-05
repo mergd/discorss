@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+    extractYouTubeVideoId,
     isYouTubeFeed,
     isYouTubeShortLink,
+    shouldSkipYouTubeLivestreams,
     shouldSkipYouTubeShorts,
 } from '../../src/utils/feed-utils.js';
+import { isYouTubeLiveFromHtml } from '../../src/utils/youtube-live.js';
 
 describe('feed-utils', () => {
     describe('isYouTubeShortLink', () => {
@@ -18,6 +21,15 @@ describe('feed-utils', () => {
             expect(
                 isYouTubeShortLink('https://www.youtube.com/watch?v=abc123')
             ).toBe(false);
+        });
+    });
+
+    describe('extractYouTubeVideoId', () => {
+        it('extracts IDs from watch and youtu.be links', () => {
+            expect(
+                extractYouTubeVideoId('https://www.youtube.com/watch?v=PWAkNx5UueM')
+            ).toBe('PWAkNx5UueM');
+            expect(extractYouTubeVideoId('https://youtu.be/PWAkNx5UueM')).toBe('PWAkNx5UueM');
         });
     });
 
@@ -46,6 +58,31 @@ describe('feed-utils', () => {
         });
     });
 
+    describe('shouldSkipYouTubeLivestreams', () => {
+        it('defaults to true for YouTube feeds when unset', () => {
+            expect(
+                shouldSkipYouTubeLivestreams({
+                    url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC123',
+                })
+            ).toBe(true);
+        });
+
+        it('defaults to false for non-YouTube feeds when unset', () => {
+            expect(
+                shouldSkipYouTubeLivestreams({ url: 'https://example.com/rss.xml' })
+            ).toBe(false);
+        });
+
+        it('respects explicit override', () => {
+            expect(
+                shouldSkipYouTubeLivestreams({
+                    url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC123',
+                    skipYoutubeLivestreams: false,
+                })
+            ).toBe(false);
+        });
+    });
+
     describe('isYouTubeFeed', () => {
         it('matches feed URL and category', () => {
             expect(
@@ -56,6 +93,24 @@ describe('feed-utils', () => {
             expect(isYouTubeFeed({ url: 'https://example.com/rss', category: 'YouTube' })).toBe(
                 true
             );
+        });
+    });
+});
+
+describe('youtube-live', () => {
+    describe('isYouTubeLiveFromHtml', () => {
+        it('detects active livestreams from player metadata', () => {
+            expect(
+                isYouTubeLiveFromHtml(
+                    '{"videoDetails":{"isLive":true},"liveBroadcastDetails":{"isLiveNow":true}}'
+                )
+            ).toBe(true);
+        });
+
+        it('ignores regular uploaded videos', () => {
+            expect(
+                isYouTubeLiveFromHtml('{"videoDetails":{"isLiveContent":false}}')
+            ).toBe(false);
         });
     });
 });

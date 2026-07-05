@@ -240,6 +240,8 @@ export class AdminApiController implements Controller {
             allowed.language = typeof updates.language === 'string' ? updates.language : null;
         if ('skipYoutubeShorts' in updates)
             allowed.skipYoutubeShorts = Boolean(updates.skipYoutubeShorts);
+        if ('skipYoutubeLivestreams' in updates)
+            allowed.skipYoutubeLivestreams = Boolean(updates.skipYoutubeLivestreams);
 
         const ok = await FeedStorageService.updateFeedDetails(
             feedId,

@@ -1613,6 +1613,7 @@ ${linkLine}${snippet}`;
                                 disableFailureNotifications: true, // Enable quiet failures for YouTube feeds
                                 disabled: false,
                                 skipYoutubeShorts: true,
+                                skipYoutubeLivestreams: true,
                             };
 
                             const newFeedId = await FeedStorageService.addFeed(feedData);
