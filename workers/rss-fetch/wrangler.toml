@@ -1,6 +1,0 @@
-name = "discorss-rss-fetch"
-main = "src/index.ts"
-compatibility_date = "2024-06-01"
-
-[observability]
-enabled = true

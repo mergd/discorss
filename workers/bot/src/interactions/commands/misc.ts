@@ -177,7 +177,7 @@ export async function handleDevCommand(ctx: CommandContext): Promise<void> {
 
 export async function handleReleaseNotesCommand(ctx: CommandContext): Promise<void> {
     try {
-        const { default: releaseNotes } = (await import('../../../../../config/release-notes.json')) as {
+        const { default: releaseNotes } = (await import('../../../config/release-notes.json')) as {
             default: Array<{
                 version: string;
                 date: string;

@@ -67,14 +67,12 @@ bun run db:load-snapshot   # loads it into remote D1 (replaces existing rows)
 The snapshot is a full replace, so re-run both commands at cutover time to capture rows written
 by the Node bot in the meantime.
 
-### Cutover from the Node bot
+### Cutover from the Node bot (completed July 2026)
 
-1. Deploy the worker + set secrets (bot keeps running on the gateway meanwhile).
-2. Register commands (idempotent; definitions are equivalent).
-3. Re-run `db:snapshot` + `db:load-snapshot` for a fresh copy of the data.
-4. Set the Interactions Endpoint URL — from this moment slash commands are handled by the worker.
-5. Stop the Node bot/container. Feed polling continues via the cron trigger against D1.
-6. Optionally delete the `discorss-rss-fetch` worker and decommission the Postgres database.
+The migration from the Railway-hosted Node bot is done: Railway is offline, the production
+Postgres data was snapshotted into D1, and the Discord Interactions Endpoint points at this
+worker. The `db:snapshot`/`db:load-snapshot` scripts are kept for reference; they require the
+old `DATABASE_URL` in the repo-root `.env`.
 
 ## Local dev
 

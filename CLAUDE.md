@@ -1,88 +1,36 @@
 # Claude AI Context for Discorss Bot
 
 ## Project Overview
-This is a Discord RSS bot called "Discorss" that automatically polls RSS feeds and posts new items to Discord channels with AI-powered summarization capabilities.
+Discorss is a Discord RSS bot that polls RSS feeds and posts new items to Discord channels with
+AI-powered summarization. It runs entirely on Cloudflare Workers — no servers.
 
-## Key Features
-- RSS feed polling and Discord integration
-- AI-powered content summarization  
-- Archive.is integration for paywalled content
-- Slash command interface
-- Multi-shard architecture with cluster management
+## Architecture (`workers/bot/`)
+- **HTTP interactions** — Discord POSTs slash-command payloads to `/interactions` (Ed25519-verified); no gateway, no discord.js.
+- **Cron Trigger** (every 2 min) — selects due feeds from D1 and enqueues them.
+- **Queue** (`discorss-feeds`) — consumer fetches/parses feeds, summarizes via OpenRouter, posts items over the Discord REST API.
+- **D1** (`discorss` database, `DB` binding) — schema in `workers/bot/migrations/0001_init.sql`; timestamps are epoch ms, booleans 0/1.
+- **Admin UI** — Vite/React app in `admin/`, served as worker assets; `/api` + `/auth` are Hono routes with Discord OAuth.
 
-## Technology Stack
-- **Runtime**: Node.js 18+ with TypeScript
-- **Discord**: discord.js v14 with hybrid sharding
-- **Database**: PostgreSQL with Drizzle ORM
-- **AI**: OpenAI API for content summarization
-- **Package Manager**: pnpm
-- **Testing**: Vitest
+## Structure
+- `workers/bot/src/` — the worker
+  - `interactions/` — command handlers + button components (deferred replies via `ctx.waitUntil`)
+  - `feeds/` — scheduler, poller, RSS fetch/parse, summarizer
+  - `discord/` — REST client, interaction types, Ed25519 verify, command metadata
+  - `services/feed-storage.ts` — all DB access (via `getDb()`/`runWithDb`)
+  - `admin/` — Hono admin API
+- `workers/bot/scripts/` — command registration, Postgres→D1 export (historical)
+- `admin/` — admin UI (PandaCSS + Base UI)
 
-## Cloudflare Workers Port
-`/workers/bot/` contains a full serverless port of the bot (HTTP interactions instead of
-gateway/discord.js, Cron Trigger + Queues for feed polling, Cloudflare D1 for storage, Hono admin
-API, admin UI served as worker assets). See `workers/bot/README.md` for deploy/cutover steps. The
-`/src/` Node bot is the legacy gateway implementation and still uses Postgres; at cutover, re-run
-`bun run db:snapshot && bun run db:load-snapshot` in workers/bot to copy the final Postgres state
-into D1.
-
-## Project Structure
-- `/src/` - Main source code
-  - `/commands/` - Discord slash commands
-  - `/events/` - Discord event handlers  
-  - `/jobs/` - Background jobs (feed polling)
-  - `/services/` - Core business logic
-  - `/utils/` - Utility functions
-  - `/db/` - Database schema and connection
-- `/config/` - Configuration files
-- `/drizzle/` - Database migrations
-- `/tests/` - Test files
-
-## Important Scripts
+## Commands (run in `workers/bot/`)
 ```bash
-# Development
-pnpm build                # Compile TypeScript
-pnpm lint                 # Run ESLint
-pnpm test                 # Run tests
-pnpm start               # Start the manager (default)
-pnpm start:bot           # Start single bot instance
-pnpm start:manager       # Start cluster manager
-
-# Database
-pnpm db:generate         # Generate migrations
-pnpm db:push            # Push schema changes
-pnpm db:migrate         # Run migrations
-pnpm db:studio          # Open Drizzle Studio
-
-# Discord Commands
-pnpm commands:register   # Register slash commands
-pnpm commands:view      # View registered commands
-pnpm commands:delete    # Delete commands
+bun run dev            # wrangler dev
+bun run typecheck
+bun run deploy         # build admin first: cd admin && bun run build
+bun run commands:register   # needs DISCORD_CLIENT_ID / DISCORD_BOT_TOKEN env
 ```
 
-## Key Constants (src/constants/misc.ts)
-- `MAX_ITEM_HOURS`: Maximum age for feed items to be processed (replaces MAX_ITEM_AGE_DAYS)
-- `DEFAULT_FREQUENCY_MINUTES`: Default polling frequency
-- `MAX_FREQUENCY_MINUTES`: Maximum allowed polling frequency
-- `MIN_FREQUENCY_MINUTES`: Minimum allowed polling frequency
-
-## Development Notes
-- Uses ES modules (`"type": "module"` in package.json)
-- TypeScript with strict configuration
-- Code follows ESLint and Prettier formatting
-- Environment variables loaded via dotenv
-- Analytics via PostHog
-- Error handling with exponential backoff for feed failures
-
-## Database Schema
-Located in `src/db/schema.ts` - uses Drizzle ORM with PostgreSQL for storing feed configurations, guild settings, and processed items.
-
-## Testing
-- Unit tests in `/tests/` directory
-- Uses Vitest as test runner
-- Coverage reports available via `pnpm test:coverage`
-
-## Docker Support
-- Docker Compose configuration available
-- Supports both local and external PostgreSQL databases
-- Use `--profile localdb` for local database setup
+## Notes
+- Package manager: bun. TypeScript strict. No `any`.
+- Secrets via `wrangler secret put` — list in `workers/bot/wrangler.jsonc` comments.
+- The pre-2026 Node.js/discord.js/Postgres implementation was deleted after cutover
+  (July 2026); see git history if needed.
