@@ -14,7 +14,14 @@ import { DiscordRest, PERMISSION_ERROR_CODES, DiscordAPIError } from '../discord
 import { ChannelTypes, MessageFlags } from '../discord/interaction.js';
 import type { Env } from '../env.js';
 import { FeedRuntimeConfig, FeedStorageService } from '../services/feed-storage.js';
-import { isYouTubeFeed, isYouTubeShortLink, shouldSkipYouTubeShorts, truncate } from '../utils.js';
+import {
+    isYouTubeFeed,
+    isYouTubeLiveVideo,
+    isYouTubeShortLink,
+    shouldSkipYouTubeLivestreams,
+    shouldSkipYouTubeShorts,
+    truncate,
+} from '../utils.js';
 import { ParsedFeedItem, parseFeedUrl } from './rss.js';
 import { fetchPageContent, summarizeContent } from './summarizer.js';
 
@@ -72,6 +79,17 @@ export class FeedPoller {
                 if (i === 0) latestItemGuid = currentItemGuid;
 
                 if (shouldSkipYouTubeShorts(feedConfig) && isYouTubeShortLink(item.link)) {
+                    continue;
+                }
+
+                if (
+                    shouldSkipYouTubeLivestreams(feedConfig) &&
+                    item.link &&
+                    (await isYouTubeLiveVideo(item.link))
+                ) {
+                    console.log(
+                        `[Poller] Skipping YouTube livestream for feed ${feedConfig.id}: ${item.link}`
+                    );
                     continue;
                 }
 

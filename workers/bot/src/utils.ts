@@ -84,6 +84,54 @@ export function shouldSkipYouTubeShorts(feed: {
     return isYouTubeFeed(feed);
 }
 
+/** null in DB means "default" — enabled for YouTube feeds, disabled otherwise */
+export function shouldSkipYouTubeLivestreams(feed: {
+    skipYoutubeLivestreams?: boolean | null;
+    url?: string | null;
+    category?: string | null;
+}): boolean {
+    if (feed.skipYoutubeLivestreams != null) return feed.skipYoutubeLivestreams;
+    return isYouTubeFeed(feed);
+}
+
+export function extractYouTubeVideoId(link?: string | null): string | null {
+    if (!link) return null;
+
+    const watchMatch = link.match(
+        /(?:youtube\.com\/watch\?(?:[^&]*&)*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    if (watchMatch) return watchMatch[1];
+
+    const embedMatch = link.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
+    return embedMatch?.[1] ?? null;
+}
+
+const LIVE_HTML_PATTERNS = [/"isLive":\s*true/, /"isLiveNow":\s*true/];
+
+/** Fetches the watch page and looks for the player's live flags. Errs on "not live". */
+export async function isYouTubeLiveVideo(link?: string | null): Promise<boolean> {
+    const videoId = extractYouTubeVideoId(link);
+    if (!videoId) return false;
+
+    try {
+        const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; DiscorssBot/1.0)',
+                Range: 'bytes=0-49999',
+            },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!res.ok) return false;
+
+        const html = await res.text();
+        return LIVE_HTML_PATTERNS.some(pattern => pattern.test(html));
+    } catch {
+        return false;
+    }
+}
+
 const WORDS_PER_MINUTE = 225;
 const MIN_READ_TIME = 1;
 

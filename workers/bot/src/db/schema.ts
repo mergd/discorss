@@ -1,6 +1,5 @@
 import { relations } from 'drizzle-orm';
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { v4 as uuidv4 } from 'uuid';
 
 // D1/SQLite port of the Postgres schema: uuid -> text, boolean -> integer(boolean),
 // timestamp -> integer(timestamp_ms), serial -> integer autoincrement. Column names
@@ -11,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 export const feeds = sqliteTable('feeds', {
     id: text('id')
         .primaryKey()
-        .$defaultFn(() => uuidv4()),
+        .$defaultFn(() => crypto.randomUUID()),
     url: text('url').notNull(),
     channelId: text('channel_id').notNull(),
     guildId: text('guild_id').notNull(),

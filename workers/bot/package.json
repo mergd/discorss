@@ -15,8 +15,7 @@
     "dependencies": {
         "drizzle-orm": "^0.44.5",
         "hono": "^4.6.0",
-        "rss-parser": "^3.13.0",
-        "uuid": "^10.0.0"
+        "rss-parser": "^3.13.0"
     },
     "devDependencies": {
         "postgres": "^3.4.5",

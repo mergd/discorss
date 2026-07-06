@@ -1,6 +1,4 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
-
 import { MAX_RECENT_LINKS } from '../constants.js';
 import { getDb } from '../db/index.js';
 import { categories, feedFailures, feeds, guilds } from '../db/schema.js';
@@ -113,7 +111,7 @@ export class FeedStorageService {
         > &
             Partial<Pick<FeedConfig, 'ignoreErrors' | 'disableFailureNotifications' | 'disabled'>>
     ): Promise<string> {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         const newFeed = {
             id,
             ...feedData,
