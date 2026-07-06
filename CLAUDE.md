@@ -18,6 +18,14 @@ This is a Discord RSS bot called "Discorss" that automatically polls RSS feeds a
 - **Package Manager**: pnpm
 - **Testing**: Vitest
 
+## Cloudflare Workers Port
+`/workers/bot/` contains a full serverless port of the bot (HTTP interactions instead of
+gateway/discord.js, Cron Trigger + Queues for feed polling, Cloudflare D1 for storage, Hono admin
+API, admin UI served as worker assets). See `workers/bot/README.md` for deploy/cutover steps. The
+`/src/` Node bot is the legacy gateway implementation and still uses Postgres; at cutover, re-run
+`bun run db:snapshot && bun run db:load-snapshot` in workers/bot to copy the final Postgres state
+into D1.
+
 ## Project Structure
 - `/src/` - Main source code
   - `/commands/` - Discord slash commands

@@ -1,0 +1,47 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "discorss-bot",
+    "main": "src/index.ts",
+    "compatibility_date": "2025-06-01",
+    "compatibility_flags": ["nodejs_compat"],
+    "observability": { "enabled": true },
+
+    // Poll scheduler: selects due feeds and enqueues them.
+    "triggers": {
+        "crons": ["*/2 * * * *"]
+    },
+
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "discorss",
+            "database_id": "3d1243e1-635d-44d7-bfb2-4f78bf8452f6"
+        }
+    ],
+
+    "queues": {
+        "producers": [{ "binding": "FEED_QUEUE", "queue": "discorss-feeds" }],
+        "consumers": [
+            {
+                "queue": "discorss-feeds",
+                "max_batch_size": 5,
+                "max_batch_timeout": 10,
+                "max_retries": 1
+            }
+        ]
+    },
+
+    // Admin UI (built with `cd ../../admin && bun run build`).
+    "assets": {
+        "directory": "../../admin/dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*", "/auth/*", "/interactions", "/health"]
+    }
+
+    // Secrets (set with `wrangler secret put <NAME>`):
+    //   DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, DISCORD_PUBLIC_KEY,
+    //   DEVELOPER_IDS, OPENROUTER_API_KEY or OPENAI_API_KEY (optional),
+    //   FEEDBACK_WEBHOOK_URL (optional), POSTHOG_API_KEY (optional),
+    //   DISCORD_CLIENT_SECRET / ADMIN_SESSION_SECRET / ADMIN_OAUTH_REDIRECT_URI (admin UI, optional)
+}

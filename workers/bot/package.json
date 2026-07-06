@@ -1,0 +1,28 @@
+{
+    "name": "discorss-worker",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "wrangler dev",
+        "deploy": "wrangler deploy",
+        "typecheck": "tsc --noEmit",
+        "commands:register": "bun run scripts/register-commands.ts",
+        "db:migrate": "wrangler d1 execute discorss --remote --file=migrations/0001_init.sql -y",
+        "db:snapshot": "TZ=UTC bun run scripts/export-postgres.ts",
+        "db:load-snapshot": "wrangler d1 execute discorss --remote --file=migrations/data-snapshot.sql -y"
+    },
+    "dependencies": {
+        "drizzle-orm": "^0.44.5",
+        "hono": "^4.6.0",
+        "rss-parser": "^3.13.0",
+        "uuid": "^10.0.0"
+    },
+    "devDependencies": {
+        "postgres": "^3.4.5",
+        "@cloudflare/workers-types": "^4.20241127.0",
+        "@types/node": "^26.1.0",
+        "typescript": "^5.8.3",
+        "wrangler": "^4.0.0"
+    }
+}
