@@ -311,7 +311,11 @@ async function handleRemove(ctx: CommandContext): Promise<void> {
     }
 
     const targetFeed = matchingFeeds[0];
-    const removed = await FeedStorageService.removeFeed(targetFeed.id, targetChannel.id, guildId);
+    const removed = await FeedStorageService.removeFeed(
+        targetFeed.id,
+        targetFeed.channelId,
+        guildId
+    );
 
     if (removed) {
         void ctx.analytics.capture({
@@ -319,7 +323,7 @@ async function handleRemove(ctx: CommandContext): Promise<void> {
             event: 'feed_removed',
             properties: {
                 guildId,
-                channelId: targetChannel.id,
+                channelId: targetFeed.channelId,
                 removedFeedIdentifier: feedIdentifier,
                 removedFeedId: targetFeed.id,
                 removedBy: user.id,
@@ -329,7 +333,7 @@ async function handleRemove(ctx: CommandContext): Promise<void> {
 
         const title = targetFeed.nickname || 'Untitled Feed';
         await ctx.editReply(
-            `✅ Feed **${title}** (${inlineCode(getShortId(targetFeed.id))}) pointing to <${targetFeed.url}> has been removed from <#${targetChannel.id}>.`
+            `✅ Feed **${title}** (${inlineCode(getShortId(targetFeed.id))}) pointing to <${targetFeed.url}> has been removed from <#${targetFeed.channelId}>.`
         );
     } else {
         await ctx.editReply(
@@ -640,8 +644,7 @@ async function handlePoke(ctx: CommandContext): Promise<void> {
             });
 
             if (targetFeed.summarize) {
-                let contentToSummarize =
-                    latestItem.content || latestItem.contentSnippet || '';
+                let contentToSummarize = latestItem.content || latestItem.contentSnippet || '';
                 if (!contentToSummarize && latestItem.link) {
                     const pageContent = await fetchPageContent(latestItem.link);
                     if (pageContent) contentToSummarize = pageContent;
@@ -662,10 +665,16 @@ async function handlePoke(ctx: CommandContext): Promise<void> {
                         targetFeed.guildId
                     );
                     if (articleSummary) {
-                        fields.push({ name: 'AI Summary (Latest Item)', value: truncate(articleSummary, 1000) });
+                        fields.push({
+                            name: 'AI Summary (Latest Item)',
+                            value: truncate(articleSummary, 1000),
+                        });
                     }
                     if (commentsSummary) {
-                        fields.push({ name: 'AI Summary (Comments)', value: truncate(commentsSummary, 1000) });
+                        fields.push({
+                            name: 'AI Summary (Comments)',
+                            value: truncate(commentsSummary, 1000),
+                        });
                     }
                 } else {
                     fields.push({
@@ -776,7 +785,9 @@ async function handleErrors(ctx: CommandContext): Promise<void> {
         const timeAgo = formatRelativeTime(failure.timestamp);
         const statusIcon = failure.ignoreErrors ? '🔇' : '⚠️';
         const urlDisplay =
-            failure.feedUrl.length > 60 ? failure.feedUrl.substring(0, 57) + '...' : failure.feedUrl;
+            failure.feedUrl.length > 60
+                ? failure.feedUrl.substring(0, 57) + '...'
+                : failure.feedUrl;
         const errorDisplay = errorMsg.length > 600 ? errorMsg.substring(0, 597) + '...' : errorMsg;
 
         let value = `${statusIcon} **${feedName}**\n`;
