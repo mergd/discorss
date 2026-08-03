@@ -322,13 +322,15 @@ export class FeedPoller {
         let sentCount = 0;
 
         for (const item of items) {
-            const contentToSend = formatItemMessage(feedConfig, item);
             const suppressEmbeds =
                 messageHasArchiveLink(feedConfig, item) || feedConfig.suppressLinkPreview;
+            const semaforEmbed = suppressEmbeds ? null : await buildSemaforEmbed(item);
+            const contentToSend = formatItemMessage(feedConfig, item, Boolean(semaforEmbed));
 
             try {
                 await this.rest.createMessage(feedConfig.channelId, {
                     content: contentToSend,
+                    ...(semaforEmbed && !suppressEmbeds ? { embeds: [semaforEmbed] } : {}),
                     allowed_mentions: { parse: [] },
                     flags: suppressEmbeds ? MessageFlags.SuppressEmbeds : undefined,
                 });
@@ -496,7 +498,11 @@ function messageHasArchiveLink(feedConfig: FeedRuntimeConfig, item: ParsedFeedIt
     return false;
 }
 
-export function formatItemMessage(feedConfig: FeedRuntimeConfig, item: ParsedFeedItem): string {
+export function formatItemMessage(
+    feedConfig: FeedRuntimeConfig,
+    item: ParsedFeedItem,
+    suppressAutomaticLinkPreview = false
+): string {
     const title = truncate(item.title || 'New Item', 150, true);
     const link = item.link;
     const author = item.creator || item.author;
@@ -515,7 +521,8 @@ export function formatItemMessage(feedConfig: FeedRuntimeConfig, item: ParsedFee
     if (displayLink?.includes('youtube.com/shorts/')) {
         displayLink = displayLink.replace('/shorts/', '/watch?v=');
     }
-    let linkLine = displayLink ? displayLink : 'No link available.';
+    const formatLink = (url: string) => (suppressAutomaticLinkPreview ? `<${url}>` : url);
+    let linkLine = displayLink ? formatLink(displayLink) : 'No link available.';
     const shouldShowArchive = feedConfig.useArchiveLinks || isPaywalled(link);
     if (link && shouldShowArchive) {
         linkLine += ` | [Archive](${getArchiveUrl(link)})`;
@@ -555,4 +562,92 @@ export function formatItemMessage(feedConfig: FeedRuntimeConfig, item: ParsedFee
         contentToSend = contentToSend.substring(0, 1997) + '...';
     }
     return contentToSend;
+}
+
+interface SemaforEmbed {
+    title: string;
+    url: string;
+    description?: string;
+    image: { url: string };
+}
+
+function isSemaforUrl(url: string | undefined): url is string {
+    if (!url) return false;
+    try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        return hostname === 'semafor.com' || hostname.endsWith('.semafor.com');
+    } catch {
+        return false;
+    }
+}
+
+function getMetaContent(html: string, property: string): string | null {
+    const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
+    const tag = tags.find(meta => {
+        const propertyMatch = meta.match(/(?:property|name)\s*=\s*(["'])(.*?)\1/i);
+        return propertyMatch?.[2].toLowerCase() === property;
+    });
+    const contentMatch = tag?.match(/content\s*=\s*(["'])(.*?)\1/i);
+    return contentMatch?.[2]?.replaceAll('&amp;', '&') ?? null;
+}
+
+async function fetchSemaforMetadata(
+    url: string
+): Promise<{ imageUrl: string; description: string | null } | null> {
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'DiscorssBot/1.0 (Discord Embed)',
+                Accept: 'text/html,application/xhtml+xml',
+            },
+            signal: AbortSignal.timeout(15_000),
+        });
+        if (!response.ok) {
+            await response.body?.cancel();
+            return null;
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) return null;
+
+        const decoder = new TextDecoder();
+        let html = '';
+        let bytesRead = 0;
+        while (bytesRead < 50_000) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytesRead += value.byteLength;
+            html += decoder.decode(value, { stream: true });
+            if (html.includes('</head>')) break;
+        }
+        await reader.cancel().catch(() => undefined);
+
+        const imageUrl = getMetaContent(html, 'og:image');
+        if (!imageUrl) return null;
+
+        const image = new URL(imageUrl);
+        if (image.protocol !== 'https:' || image.hostname !== 'img.semafor.com') return null;
+
+        return { imageUrl: image.toString(), description: getMetaContent(html, 'og:description') };
+    } catch (error) {
+        console.warn(`[FeedPoller] Failed to fetch Semafor preview metadata for ${url}:`, error);
+        return null;
+    }
+}
+
+async function buildSemaforEmbed(item: ParsedFeedItem): Promise<SemaforEmbed | null> {
+    if (!isSemaforUrl(item.link)) return null;
+
+    const metadata = await fetchSemaforMetadata(item.link);
+    if (!metadata) return null;
+
+    const description = metadata.description
+        ? truncate(metadata.description, 4_000, true)
+        : undefined;
+    return {
+        title: truncate(item.title || 'Read article', 256, true),
+        url: item.link,
+        ...(description ? { description } : {}),
+        image: { url: metadata.imageUrl },
+    };
 }
