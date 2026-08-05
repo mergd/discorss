@@ -571,6 +571,8 @@ interface SemaforEmbed {
     image: { url: string };
 }
 
+const SEMAFOR_PAGE_BACKGROUND = 'f8f5d7';
+
 function isSemaforUrl(url: string | undefined): url is string {
     if (!url) return false;
     try {
@@ -589,6 +591,19 @@ function getMetaContent(html: string, property: string): string | null {
     });
     const contentMatch = tag?.match(/content\s*=\s*(["'])(.*?)\1/i);
     return contentMatch?.[2]?.replaceAll('&amp;', '&') ?? null;
+}
+
+/**
+ * Semafor serves some preview art as transparent PNGs over its cream article background.
+ * Discord instead composites those images over its own theme, so flatten PNGs at Semafor's
+ * Sanity image CDN with the same background used on Semafor article pages.
+ */
+function addSemaforPngBackground(image: URL): string {
+    if (!image.pathname.toLowerCase().endsWith('.png')) return image.toString();
+
+    image.searchParams.set('bg', SEMAFOR_PAGE_BACKGROUND);
+    image.searchParams.set('fm', 'jpg');
+    return image.toString();
 }
 
 async function fetchSemaforMetadata(
@@ -628,7 +643,10 @@ async function fetchSemaforMetadata(
         const image = new URL(imageUrl);
         if (image.protocol !== 'https:' || image.hostname !== 'img.semafor.com') return null;
 
-        return { imageUrl: image.toString(), description: getMetaContent(html, 'og:description') };
+        return {
+            imageUrl: addSemaforPngBackground(image),
+            description: getMetaContent(html, 'og:description'),
+        };
     } catch (error) {
         console.warn(`[FeedPoller] Failed to fetch Semafor preview metadata for ${url}:`, error);
         return null;
