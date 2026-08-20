@@ -143,7 +143,7 @@ async function callModel(
         const text = await res.text().catch(() => '');
         return {
             ok: false,
-            retryable: res.status >= 500 || res.status === 429,
+            retryable: res.status === 404 || res.status === 429 || res.status >= 500,
             error: `Model API error ${res.status}: ${text.substring(0, 200)}`,
         };
     }
