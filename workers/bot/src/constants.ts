@@ -8,9 +8,10 @@ export const FAILURE_QUIET_PERIOD_HOURS = 24;
 export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 15;
 export const MAX_MINUTES = 1440;
-export const MODEL_NAME = 'google/gemini-2.5-flash-lite';
-/** Specific free model — avoid openrouter/free router (unpredictable junk outputs) */
-export const FALLBACK_MODEL_NAME = 'meta-llama/llama-3.3-70b-instruct:free';
+/** Specific free model. Avoid the openrouter/free router because model selection is unpredictable. */
+export const MODEL_NAME = 'inclusionai/ling-3.0-flash:free';
+/** Cheap paid fallback for when the free-model request limit is exhausted. */
+export const FALLBACK_MODEL_NAME = 'qwen/qwen3.5-flash-02-23';
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5;
 export const MAX_ITEMS_PER_FEED = 5;
 
