@@ -110,3 +110,8 @@ export const guilds = sqliteTable('guilds', {
         .notNull()
         .$defaultFn(() => new Date()),
 });
+
+export const systemNotifications = sqliteTable('system_notifications', {
+    notificationKey: text('notification_key').primaryKey(),
+    lastSentAt: integer('last_sent_at').notNull(),
+});

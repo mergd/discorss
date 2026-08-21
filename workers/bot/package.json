@@ -8,7 +8,7 @@
         "deploy": "wrangler deploy",
         "typecheck": "tsc --noEmit",
         "commands:register": "bun run scripts/register-commands.ts",
-        "db:migrate": "wrangler d1 execute discorss --remote --file=migrations/0001_init.sql -y",
+        "db:migrate": "wrangler d1 execute discorss --remote --file=migrations/0001_init.sql -y && wrangler d1 execute discorss --remote --file=migrations/0002_system_notifications.sql -y",
         "db:snapshot": "TZ=UTC bun run scripts/export-postgres.ts",
         "db:load-snapshot": "wrangler d1 execute discorss --remote --file=migrations/data-snapshot.sql -y"
     },

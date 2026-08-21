@@ -56,5 +56,10 @@ CREATE TABLE IF NOT EXISTS guilds (
     updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_notifications (
+    notification_key TEXT PRIMARY KEY,
+    last_sent_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS feeds_guild_id_idx ON feeds (guild_id);
 CREATE INDEX IF NOT EXISTS feed_failures_feed_id_timestamp_idx ON feed_failures (feed_id, timestamp);

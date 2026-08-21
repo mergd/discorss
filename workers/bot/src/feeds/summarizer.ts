@@ -1,6 +1,7 @@
 import { Analytics } from '../analytics.js';
 import { FALLBACK_MODEL_NAME, MODEL_NAME } from '../constants.js';
 import type { Env } from '../env.js';
+import { notifyModelCreditsExhausted } from '../model-credit-alert.js';
 import { calculateReadTime } from '../utils.js';
 
 const MAX_HTML_BYTES = 50_000;
@@ -111,7 +112,9 @@ async function callModel(
     env: Env,
     modelName: string,
     prompt: string
-): Promise<{ ok: true; text: string } | { ok: false; retryable: boolean; error: string }> {
+): Promise<
+    { ok: true; text: string } | { ok: false; retryable: boolean; error: string; status?: number }
+> {
     const apiKey = env.OPENROUTER_API_KEY || env.OPENAI_API_KEY;
     if (!apiKey) {
         return { ok: false, retryable: false, error: 'No summarization API key configured' };
@@ -145,6 +148,7 @@ async function callModel(
             ok: false,
             retryable: res.status === 404 || res.status === 429 || res.status >= 500,
             error: `Model API error ${res.status}: ${text.substring(0, 200)}`,
+            status: res.status,
         };
     }
 
@@ -220,6 +224,9 @@ ${truncatedContent}
         }
 
         if (!result.ok) {
+            if (result.status === 402) {
+                await notifyModelCreditsExhausted(env);
+            }
             if (result.retryable && i < modelsToTry.length - 1) continue;
             return 'Could not generate summary: No response from model.';
         }
