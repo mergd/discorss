@@ -134,9 +134,9 @@ async function callModel(
         body: JSON.stringify({
             model: modelName,
             messages: [{ role: 'user', content: prompt }],
-            ...(useOpenRouter ? { max_tokens: 300 } : { max_completion_tokens: 1000 }),
+            ...(useOpenRouter ? { max_tokens: 4000 } : { max_completion_tokens: 4000 }),
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(120_000),
     });
 
     if (!res.ok) {
