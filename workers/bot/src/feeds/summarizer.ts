@@ -191,13 +191,14 @@ You are an expert summarizer for Discord bot messages. Your task is to create a 
 
 **Instructions:**
 1.  Analyze the provided ${contentType}.
-2.  Generate a brief summary (ideally 2-4 sentences, max 1500 characters) capturing the main points or themes.
-3.  Focus on factual information presented. Avoid speculation or adding external knowledge.
-4.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
-5.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
-6.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 5.
-7.  **IMPORTANT: Generate the summary directly without internal reasoning or thinking. Provide only the final summary text.**
-${languageInstruction ? languageInstruction + '\n' : ''}
+2.  Write 1-2 short sentences (max 400 characters) covering only the main point.
+3.  Use proper punctuation. End each sentence with a period. Do not write one run-on paragraph or comma-splice several ideas together.
+4.  Focus on factual information presented. Avoid speculation or adding external knowledge.
+5.  **Do NOT include any introductory phrases like "Here is a summary:", "This article discusses:", etc.** Just provide the summary text directly.
+6.  **If you cannot determine meaningful content to summarize (e.g., the text is boilerplate, error messages, or nonsensical), respond ONLY with the exact phrase: "Could not generate summary: Insufficient content."**
+7.  **If the content appears to primarily be metadata or links (like the description field from an RSS feed often is), DO NOT summarize that metadata.** Use the phrase from instruction 6.
+8.  **IMPORTANT: Generate the summary directly without internal reasoning or thinking. Provide only the final summary text.**
+${languageInstruction ? languageInstruction.replace(/^8\./, '9.') + '\n' : ''}
 **Content to Summarize:**
 ${truncatedContent}
 

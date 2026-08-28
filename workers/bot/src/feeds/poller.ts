@@ -546,10 +546,10 @@ export function formatItemMessage(
             item.articleReadTime && item.articleReadTime > 0
                 ? ` (~${item.articleReadTime} min read)`
                 : '';
-        contentToSend += `\n\n**Article Summary${readTimeText}:**\n${truncate(item.articleSummary, 1500, true)}`;
+        contentToSend += `\n\n**Article Summary${readTimeText}:**\n${truncate(item.articleSummary, 500, true)}`;
     }
     if (commentsOk) {
-        contentToSend += `\n\n**Comments Summary:**\n${truncate(item.commentsSummary, 1500, true)}`;
+        contentToSend += `\n\n**Comments Summary:**\n${truncate(item.commentsSummary, 500, true)}`;
     }
     if (!articleOk && !commentsOk) {
         const errorMsg = item.articleSummary || item.commentsSummary;
