@@ -97,6 +97,7 @@ function isLowQualitySummary(text: string): boolean {
     const trimmed = text.trim();
     if (trimmed.length < 25) return true;
     if (/^user safety:\s*safe\b/i.test(trimmed)) return true;
+    if (/^thinking process\s*:/i.test(trimmed)) return true;
     if (/article summary\s*\(~?\d+\s*min read\):/i.test(trimmed) && trimmed.length < 100) {
         return true;
     }
@@ -137,7 +138,9 @@ async function callModel(
         body: JSON.stringify({
             model: modelName,
             messages: [{ role: 'user', content: prompt }],
-            ...(useOpenRouter ? { max_tokens: 4000 } : { max_completion_tokens: 4000 }),
+            ...(useOpenRouter
+                ? { max_tokens: 4000, reasoning: { enabled: false } }
+                : { max_completion_tokens: 4000 }),
         }),
         signal: AbortSignal.timeout(120_000),
     });

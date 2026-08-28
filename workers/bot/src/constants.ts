@@ -8,9 +8,9 @@ export const FAILURE_QUIET_PERIOD_HOURS = 24;
 export const MAX_ITEM_HOURS = 12;
 export const BASE_MINUTES = 15;
 export const MAX_MINUTES = 1440;
-export const MODEL_NAME = 'inclusionai/ling-3.0-flash';
+export const MODEL_NAME = 'qwen/qwen3.5-flash-02-23';
 /** Cheap fallback for when the primary model is unavailable. */
-export const FALLBACK_MODEL_NAME = 'qwen/qwen3.5-flash-02-23';
+export const FALLBACK_MODEL_NAME = 'inclusionai/ling-3.0-flash';
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5;
 export const MAX_ITEMS_PER_FEED = 5;
 
