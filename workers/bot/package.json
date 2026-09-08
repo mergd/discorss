@@ -6,6 +6,7 @@
     "scripts": {
         "dev": "wrangler dev",
         "deploy": "wrangler deploy",
+        "test": "bun test",
         "typecheck": "tsc --noEmit",
         "commands:register": "bun run scripts/register-commands.ts",
         "db:migrate": "wrangler d1 execute discorss --remote --file=migrations/0001_init.sql -y && wrangler d1 execute discorss --remote --file=migrations/0002_system_notifications.sql -y",
@@ -18,9 +19,10 @@
         "rss-parser": "^3.13.0"
     },
     "devDependencies": {
-        "postgres": "^3.4.5",
         "@cloudflare/workers-types": "^4.20241127.0",
+        "@types/bun": "^1.4.2",
         "@types/node": "^26.1.0",
+        "postgres": "^3.4.5",
         "typescript": "^5.8.3",
         "wrangler": "^4.0.0"
     }

@@ -4,8 +4,16 @@ import type { Env } from '../env.js';
 import { notifyModelCreditsExhausted } from '../model-credit-alert.js';
 import { calculateReadTime } from '../utils.js';
 
-const MAX_HTML_BYTES = 50_000;
+const INITIAL_HTML_BYTES = 50_000;
+const MAX_HTML_BYTES = 500_000;
 const MAX_EXTRACTED_CONTENT_LENGTH = 8_000;
+
+function hasCompleteReadableContainer(html: string): boolean {
+    return (
+        /<article\b[^>]*>[\s\S]{500,}<\/article>/i.test(html) ||
+        /<main\b[^>]*>[\s\S]{500,}<\/main>/i.test(html)
+    );
+}
 
 /**
  * Fetches a page's HTML (bounded) and extracts readable text with the same
@@ -35,7 +43,9 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             return null;
         }
 
-        // Read only the first chunk we care about.
+        // Many publisher pages put more than 50 KB of styles and metadata before
+        // the article. Keep streaming until a readable container is complete,
+        // while retaining a hard ceiling for unusually large responses.
         let html = '';
         if (res.body) {
             const reader = res.body.getReader();
@@ -44,9 +54,18 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             while (totalBytes < MAX_HTML_BYTES) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                totalBytes += value.byteLength;
-                html += decoder.decode(value, { stream: true });
+
+                const remainingBytes = MAX_HTML_BYTES - totalBytes;
+                const chunk =
+                    value.byteLength > remainingBytes ? value.slice(0, remainingBytes) : value;
+                totalBytes += chunk.byteLength;
+                html += decoder.decode(chunk, { stream: true });
+
+                if (totalBytes >= INITIAL_HTML_BYTES && hasCompleteReadableContainer(html)) {
+                    break;
+                }
             }
+            html += decoder.decode();
             await reader.cancel().catch(() => undefined);
         }
 
@@ -239,6 +258,18 @@ ${truncatedContent}
         if (!text || text.trim().length === 0) {
             if (i < modelsToTry.length - 1) continue;
             return 'Could not generate summary: Empty response from model.';
+        }
+
+        if (
+            text.includes('Could not generate summary: Insufficient content.') &&
+            i < modelsToTry.length - 1
+        ) {
+            await analytics.capture({
+                distinctId,
+                event: 'summarization_insufficient_content',
+                properties: { model: modelName, isFallback, sourceUrl, contentType },
+            });
+            continue;
         }
 
         if (text.includes('Could not generate summary:')) {
