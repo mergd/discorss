@@ -54,6 +54,37 @@ describe('fetchPageContent', () => {
         expect(content).toContain('The actual story contains useful reporting');
         expect(content).not.toContain('Navigation');
     });
+
+    test('uses a substantial social-card description when the page body is empty', async () => {
+        const description =
+            'This social post contains a complete argument with enough detail to summarize accurately.';
+        const html = `<html><head><meta property="og:description" content="${description}"></head><body></body></html>`;
+
+        globalThis.fetch = mock(
+            async () => new Response(html, { headers: { 'content-type': 'text/html' } })
+        ) as unknown as typeof fetch;
+
+        const content = await fetchPageContent('https://example.social/post/123');
+
+        expect(content).toBe(description);
+    });
+
+    test('retries an empty page response once', async () => {
+        let attempts = 0;
+        globalThis.fetch = mock(async () => {
+            attempts++;
+            const html =
+                attempts === 1
+                    ? '<html><body></body></html>'
+                    : `<html><body><article>${'Recovered article content. '.repeat(50)}</article></body></html>`;
+            return new Response(html, { headers: { 'content-type': 'text/html' } });
+        }) as unknown as typeof fetch;
+
+        const content = await fetchPageContent('https://example.com/transient-failure');
+
+        expect(attempts).toBe(2);
+        expect(content).toContain('Recovered article content');
+    });
 });
 
 describe('hasSubstantialFeedContent', () => {
@@ -100,5 +131,42 @@ describe('summarizeContent', () => {
         expect(result.articleSummary).toBe(
             'Working in soil can increase exposure to beneficial microbes.'
         );
+    });
+
+    test('records a terminal failure when both models reject the content', async () => {
+        globalThis.fetch = mock(
+            async () =>
+                Response.json({
+                    choices: [
+                        {
+                            message: {
+                                content: 'Could not generate summary: Insufficient content.',
+                            },
+                        },
+                    ],
+                })
+        ) as unknown as typeof fetch;
+
+        const analytics = new Analytics(undefined);
+        const capturedEvents: Array<{ event: string; properties?: Record<string, unknown> }> = [];
+        analytics.capture = mock(async event => {
+            capturedEvents.push(event);
+        });
+
+        const result = await summarizeContent(
+            { OPENROUTER_API_KEY: 'test-key' } as Env,
+            analytics,
+            'Content that both configured models decline to summarize.',
+            null,
+            'https://example.com/rejected'
+        );
+
+        expect(result.articleSummary).toBe(
+            'Could not generate summary: Insufficient content.'
+        );
+        expect(capturedEvents.some(event => event.event === 'summarization_failed')).toBeTrue();
+        expect(
+            capturedEvents.find(event => event.event === 'summarization_failed')?.properties?.reason
+        ).toBe('insufficient_content');
     });
 });

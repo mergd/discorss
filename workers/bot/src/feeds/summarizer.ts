@@ -41,11 +41,28 @@ function cleanHtmlFragment(html: string): string {
         .trim();
 }
 
+function extractMetaDescription(html: string): string | null {
+    for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
+        const tag = match[0];
+        const key = tag.match(/\b(?:name|property)=["']([^"']+)["']/i)?.[1]?.toLowerCase();
+        if (key !== 'description' && key !== 'og:description' && key !== 'twitter:description') {
+            continue;
+        }
+
+        const description = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+        if (!description) continue;
+        const cleaned = cleanHtmlFragment(description);
+        if (cleaned.length >= 80) return cleaned;
+    }
+
+    return null;
+}
+
 /**
  * Fetches a page's HTML (bounded) and extracts readable text with the same
  * regex approach the Node bot used.
  */
-export async function fetchPageContent(url: string): Promise<string | null> {
+async function fetchPageContentOnce(url: string): Promise<string | null> {
     try {
         const res = await fetch(url, {
             headers: {
@@ -55,6 +72,7 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {
+            console.warn(`[Summarizer] Page fetch failed with ${res.status}: ${url}`);
             await res.body?.cancel();
             return null;
         }
@@ -125,11 +143,22 @@ export async function fetchPageContent(url: string): Promise<string | null> {
         const cleanedText =
             extractedContent.length >= 1_000 ? extractedContent : cleanHtmlFragment(textContent);
 
-        return cleanedText.substring(0, MAX_EXTRACTED_CONTENT_LENGTH);
+        const result = cleanedText || extractMetaDescription(html);
+        return result ? result.substring(0, MAX_EXTRACTED_CONTENT_LENGTH) : null;
     } catch (error) {
         console.error(`[Summarizer] Error fetching page content from ${url}:`, error);
         return null;
     }
+}
+
+export async function fetchPageContent(url: string): Promise<string | null> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const content = await fetchPageContentOnce(url);
+        if (content) return content;
+        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    return null;
 }
 
 function isLowQualitySummary(text: string): boolean {
@@ -246,6 +275,26 @@ ${truncatedContent}
 
     const distinctId = guildId || 'system_summarizer';
     const modelsToTry = [MODEL_NAME, FALLBACK_MODEL_NAME];
+    const captureFailure = (
+        reason: string,
+        model: string,
+        isFallback: boolean,
+        extraProperties: Record<string, unknown> = {}
+    ) =>
+        analytics.capture({
+            distinctId,
+            event: 'summarization_failed',
+            properties: {
+                reason,
+                model,
+                isFallback,
+                sourceUrl,
+                contentType,
+                contentLength: truncatedContent.length,
+                ...extraProperties,
+            },
+            groups: guildId ? { guild: guildId } : undefined,
+        });
 
     for (let i = 0; i < modelsToTry.length; i++) {
         const modelName = modelsToTry[i];
@@ -263,6 +312,9 @@ ${truncatedContent}
                 contentType,
             });
             if (i < modelsToTry.length - 1) continue;
+            await captureFailure('model_exception', modelName, isFallback, {
+                error: error instanceof Error ? error.message : String(error),
+            });
             return 'Could not generate summary: Error contacting summarization service.';
         }
 
@@ -284,12 +336,17 @@ ${truncatedContent}
                 await notifyModelCreditsExhausted(env);
             }
             if (result.retryable && i < modelsToTry.length - 1) continue;
+            await captureFailure('model_failure', modelName, isFallback, {
+                status: result.status,
+                error: result.error,
+            });
             return 'Could not generate summary: No response from model.';
         }
 
         const text = result.text;
         if (!text || text.trim().length === 0) {
             if (i < modelsToTry.length - 1) continue;
+            await captureFailure('empty_response', modelName, isFallback);
             return 'Could not generate summary: Empty response from model.';
         }
 
@@ -306,6 +363,12 @@ ${truncatedContent}
         }
 
         if (text.includes('Could not generate summary:')) {
+            await captureFailure(
+                text.includes('Insufficient content') ? 'insufficient_content' : 'model_rejection',
+                modelName,
+                isFallback,
+                { response: text.substring(0, 200) }
+            );
             return text;
         }
 
@@ -316,6 +379,7 @@ ${truncatedContent}
                 properties: { model: modelName, isFallback, sourceUrl, contentType },
             });
             if (i < modelsToTry.length - 1) continue;
+            await captureFailure('low_quality', modelName, isFallback);
             return 'Could not generate summary: Insufficient content.';
         }
 

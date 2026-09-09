@@ -288,6 +288,16 @@ export class FeedPoller {
                     item.commentsSummary = summaries.commentsSummary;
                     item.articleReadTime = summaries.articleReadTime;
                 } else {
+                    await this.analytics.capture({
+                        distinctId: feedConfig.guildId,
+                        event: 'summarization_no_content',
+                        properties: {
+                            feedId: feedConfig.id,
+                            sourceUrl,
+                            commentsUrl: item.comments,
+                        },
+                        groups: { guild: feedConfig.guildId },
+                    });
                     item.articleSummary = 'Could not generate summary: No content fetched.';
                 }
             } catch (fetchOrSummarizeError) {
