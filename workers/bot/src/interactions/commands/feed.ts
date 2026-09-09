@@ -12,7 +12,11 @@ import {
     interactionUser,
     ResolvedChannel,
 } from '../../discord/interaction.js';
-import { fetchPageContent, summarizeContent } from '../../feeds/summarizer.js';
+import {
+    fetchPageContent,
+    hasSubstantialFeedContent,
+    summarizeContent,
+} from '../../feeds/summarizer.js';
 import { parseFeedUrl } from '../../feeds/rss.js';
 import { FeedConfig, FeedStorageService } from '../../services/feed-storage.js';
 import {
@@ -174,7 +178,7 @@ async function handleAdd(ctx: CommandContext): Promise<void> {
 
                     if (firstItem.link) {
                         const feedItemContent = firstItem['content:encoded'] || firstItem.content;
-                        if (feedItemContent && feedItemContent.length > 200) {
+                        if (hasSubstantialFeedContent(feedItemContent)) {
                             articleContent = feedItemContent;
                         } else {
                             articleContent = await fetchPageContent(firstItem.link);
@@ -505,7 +509,7 @@ async function handleTest(ctx: CommandContext): Promise<void> {
 
                 if (firstItem.link) {
                     const feedItemContent = firstItem['content:encoded'] || firstItem.content;
-                    if (feedItemContent && feedItemContent.length > 200) {
+                    if (hasSubstantialFeedContent(feedItemContent)) {
                         articleContent = feedItemContent;
                     } else {
                         articleContent = await fetchPageContent(firstItem.link);
@@ -644,7 +648,10 @@ async function handlePoke(ctx: CommandContext): Promise<void> {
             });
 
             if (targetFeed.summarize) {
-                let contentToSummarize = latestItem.content || latestItem.contentSnippet || '';
+                const feedItemContent = latestItem.content || latestItem.contentSnippet;
+                let contentToSummarize = hasSubstantialFeedContent(feedItemContent)
+                    ? feedItemContent
+                    : '';
                 if (!contentToSummarize && latestItem.link) {
                     const pageContent = await fetchPageContent(latestItem.link);
                     if (pageContent) contentToSummarize = pageContent;

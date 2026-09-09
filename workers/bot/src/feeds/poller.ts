@@ -23,7 +23,7 @@ import {
     truncate,
 } from '../utils.js';
 import { ParsedFeedItem, parseFeedUrl } from './rss.js';
-import { fetchPageContent, summarizeContent } from './summarizer.js';
+import { fetchPageContent, hasSubstantialFeedContent, summarizeContent } from './summarizer.js';
 
 export class FeedPoller {
     constructor(
@@ -136,7 +136,11 @@ export class FeedPoller {
                         feedConfig.id,
                         `Feed has been returning 400-level errors for more than 3 days: ${feedConfig.url}`
                     );
-                    await this.sendFeedDisabledNotification(feedConfig, '400-level errors', '3 days');
+                    await this.sendFeedDisabledNotification(
+                        feedConfig,
+                        '400-level errors',
+                        '3 days'
+                    );
                 } else if (
                     await FeedStorageService.shouldAutoDisableServerErrorFeed(feedConfig.id)
                 ) {
@@ -256,7 +260,7 @@ export class FeedPoller {
 
                 if (item.link) {
                     const feedItemContent = item['content:encoded'] || item.content;
-                    if (feedItemContent && feedItemContent.length > 200) {
+                    if (hasSubstantialFeedContent(feedItemContent)) {
                         articleContent = feedItemContent;
                     } else {
                         articleContent = await fetchPageContent(item.link);
@@ -357,7 +361,8 @@ export class FeedPoller {
             await FeedStorageService.updateRecentLinks(feedConfig.id, [...new Set(postedLinks)]);
         }
 
-        const allSucceeded = sentCount === items.length && !firstPermissionError && !firstOtherError;
+        const allSucceeded =
+            sentCount === items.length && !firstPermissionError && !firstOtherError;
         if (allSucceeded) {
             await FeedStorageService.clearFeedFailures(feedConfig.id);
             await FeedStorageService.clearLastFailureNotification(feedConfig.id);

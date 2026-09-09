@@ -8,11 +8,37 @@ const INITIAL_HTML_BYTES = 50_000;
 const MAX_HTML_BYTES = 500_000;
 const MAX_EXTRACTED_CONTENT_LENGTH = 8_000;
 
+export function hasSubstantialFeedContent(content: string | null | undefined): content is string {
+    if (!content) return false;
+
+    const plainText = content
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/https?:\/\/\S+/gi, ' ')
+        .replace(/&[a-zA-Z0-9#]+;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return plainText.length > 200;
+}
+
 function hasCompleteReadableContainer(html: string): boolean {
     return (
         /<article\b[^>]*>[\s\S]{500,}<\/article>/i.test(html) ||
         /<main\b[^>]*>[\s\S]{500,}<\/main>/i.test(html)
     );
+}
+
+function cleanHtmlFragment(html: string): string {
+    return html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&[a-zA-Z0-9#]+;/g, ' ')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\(https?:\/\/[^\s\)]+\)/g, ' ')
+        .replace(/https?:\/\/[^\s]+/g, ' ')
+        .replace(/[^\w\s.,!?;:'"()-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 /**
@@ -78,32 +104,26 @@ export async function fetchPageContent(url: string): Promise<string | null> {
             .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, ' ');
 
         const contentPatterns = [
-            /<main[^>]*>([\s\S]*?)<\/main>/i,
-            /<article[^>]*>([\s\S]*?)<\/article>/i,
-            /role=["']main["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
-            /class=["'][^"']*content[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
-            /id=["']content["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
+            /<main[^>]*>([\s\S]*?)<\/main>/gi,
+            /<article[^>]*>([\s\S]*?)<\/article>/gi,
+            /role=["']main["'][^>]*>([\s\S]*?)<\/[^>]+>/gi,
+            /class=["'][^"']*content[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/gi,
+            /id=["']content["'][^>]*>([\s\S]*?)<\/[^>]+>/gi,
         ];
 
-        let extractedContent: string | null = null;
+        let extractedContent = '';
         for (const pattern of contentPatterns) {
-            const match = textContent.match(pattern);
-            if (match && match[1] && match[1].length > 500) {
-                extractedContent = match[1];
-                break;
+            for (const match of textContent.matchAll(pattern)) {
+                if (!match[1] || match[1].length <= 500) continue;
+                const candidate = cleanHtmlFragment(match[1]);
+                if (candidate.length > extractedContent.length) {
+                    extractedContent = candidate;
+                }
             }
         }
 
-        const cleanedText = (extractedContent || textContent)
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&[a-zA-Z0-9#]+;/g, ' ')
-            .replace(/<!--[\s\S]*?-->/g, ' ')
-            .replace(/\[.*?\]/g, ' ')
-            .replace(/\(https?:\/\/[^\s\)]+\)/g, ' ')
-            .replace(/https?:\/\/[^\s]+/g, ' ')
-            .replace(/[^\w\s.,!?;:'"()-]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+        const cleanedText =
+            extractedContent.length >= 1_000 ? extractedContent : cleanHtmlFragment(textContent);
 
         return cleanedText.substring(0, MAX_EXTRACTED_CONTENT_LENGTH);
     } catch (error) {
@@ -247,6 +267,19 @@ ${truncatedContent}
         }
 
         if (!result.ok) {
+            console.error(`[Summarizer] ${modelName} failed: ${result.error}`);
+            await analytics.capture({
+                distinctId,
+                event: 'summarization_model_failure',
+                properties: {
+                    model: modelName,
+                    isFallback,
+                    sourceUrl,
+                    contentType,
+                    status: result.status,
+                    error: result.error,
+                },
+            });
             if (result.status === 402) {
                 await notifyModelCreditsExhausted(env);
             }

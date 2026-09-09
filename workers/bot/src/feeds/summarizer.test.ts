@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 
 import { Analytics } from '../analytics.js';
 import type { Env } from '../env.js';
-import { fetchPageContent, summarizeContent } from './summarizer.js';
+import { fetchPageContent, hasSubstantialFeedContent, summarizeContent } from './summarizer.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -38,6 +38,41 @@ describe('fetchPageContent', () => {
 
         expect(content).not.toBeNull();
         expect(content!.length).toBeLessThanOrEqual(8_000);
+    });
+
+    test('chooses the most substantial article instead of the first article element', async () => {
+        const navigation = `<article>${'<span></span>'.repeat(50)}Navigation</article>`;
+        const story = `<article><p>${'The actual story contains useful reporting and concrete details. '.repeat(24)}</p></article>`;
+        const html = `<html><body>${navigation}${story}</body></html>`;
+
+        globalThis.fetch = mock(
+            async () => new Response(html, { headers: { 'content-type': 'text/html' } })
+        ) as unknown as typeof fetch;
+
+        const content = await fetchPageContent('https://example.com/multiple-articles');
+
+        expect(content).toContain('The actual story contains useful reporting');
+        expect(content).not.toContain('Navigation');
+    });
+});
+
+describe('hasSubstantialFeedContent', () => {
+    test('rejects Hacker News RSS metadata even when its HTML exceeds 200 characters', () => {
+        const content = `
+            <p>Article URL: <a href="https://example.com/a-long-article">https://example.com/a-long-article</a></p>
+            <p>Comments URL: <a href="https://news.ycombinator.com/item?id=123">https://news.ycombinator.com/item?id=123</a></p>
+            <p>Points: 100</p>
+            <p># Comments: 50</p>
+        `;
+
+        expect(content.length).toBeGreaterThan(200);
+        expect(hasSubstantialFeedContent(content)).toBeFalse();
+    });
+
+    test('accepts substantial prose in a feed item', () => {
+        const content = `<p>${'This paragraph contains meaningful article prose. '.repeat(8)}</p>`;
+
+        expect(hasSubstantialFeedContent(content)).toBeTrue();
     });
 });
 
