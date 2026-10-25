@@ -18,9 +18,7 @@ export interface Env {
     ADMIN_OAUTH_REDIRECT_URI?: string;
 }
 
-export interface FeedQueueMessage {
-    feedId: string;
-}
+export type FeedQueueMessage = { feedIds: string[] } | { feedId: string };
 
 export function isAdminOAuthConfigured(env: Env): boolean {
     return !!(env.DISCORD_CLIENT_SECRET && env.ADMIN_SESSION_SECRET && env.ADMIN_OAUTH_REDIRECT_URI);

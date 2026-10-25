@@ -5,6 +5,7 @@ import {
 } from '../constants.js';
 import type { Env, FeedQueueMessage } from '../env.js';
 import { FeedPollConfig, FeedStorageService } from '../services/feed-storage.js';
+import { groupFeedChecks } from './queue.js';
 
 function getEffectiveFrequency(
     feed: FeedPollConfig,
@@ -45,30 +46,30 @@ export async function scheduleDueFeeds(env: Env, scheduledTime: number): Promise
     }
 
     const now = Date.now();
-    const due: FeedQueueMessage[] = [];
+    const due: string[] = [];
     for (const feed of allFeeds) {
         if (feed.backoffUntil && new Date(feed.backoffUntil).getTime() > now) continue;
 
-        const frequencyMs =
-            getEffectiveFrequency(feed, categoryFrequencies) * 60 * 1000;
+        const frequencyMs = getEffectiveFrequency(feed, categoryFrequencies) * 60 * 1000;
         const lastChecked = feed.lastChecked ? new Date(feed.lastChecked).getTime() : 0;
         if (now - lastChecked >= frequencyMs) {
-            due.push({ feedId: feed.id });
+            due.push(feed.id);
         }
     }
 
     console.log(`[Scheduler] ${due.length}/${allFeeds.length} feeds due for polling`);
 
-    // sendBatch accepts at most 100 messages per call
-    for (let i = 0; i < due.length; i += 100) {
+    const messages: FeedQueueMessage[] = groupFeedChecks(due);
+    // sendBatch accepts at most 100 messages per call.
+    for (let i = 0; i < messages.length; i += 100) {
         await env.FEED_QUEUE.sendBatch(
-            due.slice(i, i + 100).map(body => ({ body, contentType: 'json' as const }))
+            messages.slice(i, i + 100).map(body => ({ body, contentType: 'json' as const }))
         );
     }
 
     // Stamp lastChecked now so a check that outlives one cron interval is not
     // enqueued twice (which would double-post items).
-    await FeedStorageService.markPolled(due.map(m => m.feedId));
+    await FeedStorageService.markPolled(due);
 
     // Hourly maintenance
     const scheduledDate = new Date(scheduledTime);
