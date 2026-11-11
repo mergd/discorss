@@ -1,5 +1,5 @@
 import { Analytics } from '../analytics.js';
-import { FALLBACK_MODEL_NAME, MODEL_NAME } from '../constants.js';
+import { SUMMARY_MODELS } from '../constants.js';
 import type { Env } from '../env.js';
 import { notifyModelCreditsExhausted } from '../model-credit-alert.js';
 import { calculateReadTime } from '../utils.js';
@@ -180,7 +180,8 @@ interface ChatCompletionResponse {
 async function callModel(
     env: Env,
     modelName: string,
-    prompt: string
+    prompt: string,
+    byokProvider?: string
 ): Promise<
     { ok: true; text: string } | { ok: false; retryable: boolean; error: string; status?: number }
 > {
@@ -207,7 +208,14 @@ async function callModel(
             model: modelName,
             messages: [{ role: 'user', content: prompt }],
             ...(useOpenRouter
-                ? { max_tokens: 4000, reasoning: { enabled: false } }
+                ? {
+                      max_tokens: 4000,
+                      reasoning: { enabled: false },
+                      // BYOK-only workspace settings prevent shared capacity on these providers.
+                      ...(byokProvider
+                          ? { provider: { only: [byokProvider], allow_fallbacks: false } }
+                          : {}),
+                  }
                 : { max_completion_tokens: 4000 }),
         }),
         signal: AbortSignal.timeout(120_000),
@@ -274,7 +282,9 @@ ${truncatedContent}
     `;
 
     const distinctId = guildId || 'system_summarizer';
-    const modelsToTry = [MODEL_NAME, FALLBACK_MODEL_NAME];
+    const modelsToTry = env.OPENROUTER_API_KEY
+        ? SUMMARY_MODELS
+        : [{ model: 'gpt-6-luna', byokProvider: undefined }];
     const captureFailure = (
         reason: string,
         model: string,
@@ -297,12 +307,12 @@ ${truncatedContent}
         });
 
     for (let i = 0; i < modelsToTry.length; i++) {
-        const modelName = modelsToTry[i];
+        const { model: modelName, byokProvider } = modelsToTry[i];
         const isFallback = i > 0;
 
         let result: Awaited<ReturnType<typeof callModel>>;
         try {
-            result = await callModel(env, modelName, prompt);
+            result = await callModel(env, modelName, prompt, byokProvider);
         } catch (error) {
             console.error(`[Summarizer] Error calling ${modelName}:`, error);
             await analytics.captureException(distinctId, 'SummarizationModelError', error, {
@@ -332,10 +342,10 @@ ${truncatedContent}
                     error: result.error,
                 },
             });
-            if (result.status === 402) {
+            if (result.status === 402 && !byokProvider) {
                 await notifyModelCreditsExhausted(env);
             }
-            if (result.retryable && i < modelsToTry.length - 1) continue;
+            if ((byokProvider || result.retryable) && i < modelsToTry.length - 1) continue;
             await captureFailure('model_failure', modelName, isFallback, {
                 status: result.status,
                 error: result.error,

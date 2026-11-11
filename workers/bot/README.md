@@ -76,6 +76,13 @@ old `DATABASE_URL` in the repo-root `.env`.
 
 ## Local dev
 
+Summarization through OpenRouter tries Claude Haiku 5.5, GPT-6 Luna, Qwen 3.5 Flash,
+then Ling 3.0 Flash. Haiku and Luna are pinned to Anthropic and OpenAI respectively.
+In the OpenRouter workspace, keep both providers' BYOK keys prioritized and disable
+shared capacity for all models on both providers. This makes failures advance to the
+next model instead of spending OpenRouter credits on those providers. With only
+`OPENAI_API_KEY` configured, the bot uses GPT-6 Luna directly.
+
 ```bash
 # .dev.vars with the secrets above, then:
 wrangler dev

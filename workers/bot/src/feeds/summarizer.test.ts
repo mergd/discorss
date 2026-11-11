@@ -108,6 +108,113 @@ describe('hasSubstantialFeedContent', () => {
 });
 
 describe('summarizeContent', () => {
+    test('uses Haiku on the Anthropic provider without calling fallbacks on success', async () => {
+        const requests: Array<Record<string, unknown>> = [];
+        globalThis.fetch = mock(async (_input, init) => {
+            requests.push(JSON.parse(String(init?.body)));
+            return Response.json({
+                choices: [
+                    { message: { content: 'The town approved longer library opening hours.' } },
+                ],
+            });
+        }) as unknown as typeof fetch;
+
+        const result = await summarizeContent(
+            { OPENROUTER_API_KEY: 'test-key' } as Env,
+            new Analytics(undefined),
+            'The town council voted to keep the public library open longer on weekends.',
+            null
+        );
+
+        expect(result.articleSummary).toBe('The town approved longer library opening hours.');
+        expect(requests).toHaveLength(1);
+        expect(requests[0].model).toBe('anthropic/claude-haiku-5.5');
+        expect(requests[0].provider).toEqual({ only: ['anthropic'], allow_fallbacks: false });
+    });
+
+    test.each([401, 402, 403, 429, 503])(
+        'tries both BYOK models before Qwen when providers return %s',
+        async status => {
+            const requests: Array<{ model: string; provider?: unknown }> = [];
+            globalThis.fetch = mock(async (_input, init) => {
+                requests.push(JSON.parse(String(init?.body)));
+                if (requests.length <= 2) return new Response('Provider unavailable', { status });
+                return Response.json({
+                    choices: [
+                        { message: { content: 'The town approved longer library opening hours.' } },
+                    ],
+                });
+            }) as unknown as typeof fetch;
+
+            const result = await summarizeContent(
+                { OPENROUTER_API_KEY: 'test-key' } as Env,
+                new Analytics(undefined),
+                'The town council voted to keep the public library open longer on weekends.',
+                null
+            );
+
+            expect(result.articleSummary).toBe('The town approved longer library opening hours.');
+            expect(requests.map(request => request.model)).toEqual([
+                'anthropic/claude-haiku-5.5',
+                'openai/gpt-6-luna',
+                'qwen/qwen3.5-flash-02-23',
+            ]);
+            expect(requests[1].provider).toEqual({ only: ['openai'], allow_fallbacks: false });
+            expect(requests[2].provider).toBeUndefined();
+        }
+    );
+
+    test('retains Ling as the final fallback after Qwen fails', async () => {
+        const models: string[] = [];
+        globalThis.fetch = mock(async (_input, init) => {
+            models.push(JSON.parse(String(init?.body)).model);
+            if (models.length < 4) return new Response('Rate limited', { status: 429 });
+            return Response.json({
+                choices: [
+                    { message: { content: 'The town approved longer library opening hours.' } },
+                ],
+            });
+        }) as unknown as typeof fetch;
+
+        const result = await summarizeContent(
+            { OPENROUTER_API_KEY: 'test-key' } as Env,
+            new Analytics(undefined),
+            'The town council voted to keep the public library open longer on weekends.',
+            null
+        );
+
+        expect(models.at(-1)).toBe('inclusionai/ling-3.0-flash');
+        expect(models).toHaveLength(4);
+        expect(result.articleSummary).toBe('The town approved longer library opening hours.');
+    });
+
+    test('uses a native Luna model ID when only an OpenAI key is configured', async () => {
+        let requestedUrl: unknown;
+        let requestedBody: Record<string, unknown> = {};
+        globalThis.fetch = mock(async (input, init) => {
+            requestedUrl = input;
+            requestedBody = JSON.parse(String(init?.body));
+            return Response.json({
+                choices: [
+                    { message: { content: 'The town approved longer library opening hours.' } },
+                ],
+            });
+        }) as unknown as typeof fetch;
+
+        const result = await summarizeContent(
+            { OPENAI_API_KEY: 'test-key' } as Env,
+            new Analytics(undefined),
+            'The town council voted to keep the public library open longer on weekends.',
+            null
+        );
+
+        expect(result.articleSummary).toBe('The town approved longer library opening hours.');
+        expect(requestedUrl).toBe('https://api.openai.com/v1/chat/completions');
+        expect(requestedBody.model).toBe('gpt-6-luna');
+        expect(requestedBody.provider).toBeUndefined();
+        expect(requestedBody.max_completion_tokens).toBe(4000);
+    });
+
     test('tries the fallback model after an insufficient-content response', async () => {
         const requestedModels: string[] = [];
         globalThis.fetch = mock(async (_input, init) => {
@@ -133,18 +240,17 @@ describe('summarizeContent', () => {
         );
     });
 
-    test('records a terminal failure when both models reject the content', async () => {
-        globalThis.fetch = mock(
-            async () =>
-                Response.json({
-                    choices: [
-                        {
-                            message: {
-                                content: 'Could not generate summary: Insufficient content.',
-                            },
+    test('records a terminal failure when all models reject the content', async () => {
+        globalThis.fetch = mock(async () =>
+            Response.json({
+                choices: [
+                    {
+                        message: {
+                            content: 'Could not generate summary: Insufficient content.',
                         },
-                    ],
-                })
+                    },
+                ],
+            })
         ) as unknown as typeof fetch;
 
         const analytics = new Analytics(undefined);
@@ -156,14 +262,12 @@ describe('summarizeContent', () => {
         const result = await summarizeContent(
             { OPENROUTER_API_KEY: 'test-key' } as Env,
             analytics,
-            'Content that both configured models decline to summarize.',
+            'Content that all configured models decline to summarize.',
             null,
             'https://example.com/rejected'
         );
 
-        expect(result.articleSummary).toBe(
-            'Could not generate summary: Insufficient content.'
-        );
+        expect(result.articleSummary).toBe('Could not generate summary: Insufficient content.');
         expect(capturedEvents.some(event => event.event === 'summarization_failed')).toBeTrue();
         expect(
             capturedEvents.find(event => event.event === 'summarization_failed')?.properties?.reason
