@@ -210,7 +210,8 @@ async function callModel(
             ...(useOpenRouter
                 ? {
                       max_tokens: 4000,
-                      reasoning: { enabled: false },
+                      reasoning:
+                          modelName === 'openrouter/free' ? { exclude: true } : { enabled: false },
                       // BYOK-only workspace settings prevent shared capacity on these providers.
                       ...(byokProvider
                           ? { provider: { only: [byokProvider], allow_fallbacks: false } }
@@ -225,7 +226,11 @@ async function callModel(
         const text = await res.text().catch(() => '');
         return {
             ok: false,
-            retryable: res.status === 404 || res.status === 429 || res.status >= 500,
+            retryable:
+                (useOpenRouter && res.status === 402) ||
+                res.status === 404 ||
+                res.status === 429 ||
+                res.status >= 500,
             error: `Model API error ${res.status}: ${text.substring(0, 200)}`,
             status: res.status,
         };
@@ -285,13 +290,15 @@ ${truncatedContent}
     const modelsToTry = env.OPENROUTER_API_KEY
         ? SUMMARY_MODELS
         : [{ model: 'gpt-6-luna', byokProvider: undefined }];
-    const captureFailure = (
+    let creditsExhausted = false;
+    const captureFailure = async (
         reason: string,
         model: string,
         isFallback: boolean,
         extraProperties: Record<string, unknown> = {}
-    ) =>
-        analytics.capture({
+    ) => {
+        if (creditsExhausted) await notifyModelCreditsExhausted(env);
+        await analytics.capture({
             distinctId,
             event: 'summarization_failed',
             properties: {
@@ -305,6 +312,7 @@ ${truncatedContent}
             },
             groups: guildId ? { guild: guildId } : undefined,
         });
+    };
 
     for (let i = 0; i < modelsToTry.length; i++) {
         const { model: modelName, byokProvider } = modelsToTry[i];
@@ -343,7 +351,7 @@ ${truncatedContent}
                 },
             });
             if (result.status === 402 && !byokProvider) {
-                await notifyModelCreditsExhausted(env);
+                creditsExhausted = true;
             }
             if ((byokProvider || result.retryable) && i < modelsToTry.length - 1) continue;
             await captureFailure('model_failure', modelName, isFallback, {

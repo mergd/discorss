@@ -164,11 +164,16 @@ describe('summarizeContent', () => {
         }
     );
 
-    test('retains Ling as the final fallback after Qwen fails', async () => {
+    test.each([402, 429])('uses free models after Qwen returns %s', async status => {
         const models: string[] = [];
+        const claimAlert = mock(() => {
+            throw new Error('A successful free fallback must not claim a credit alert');
+        });
         globalThis.fetch = mock(async (_input, init) => {
-            models.push(JSON.parse(String(init?.body)).model);
-            if (models.length < 4) return new Response('Rate limited', { status: 429 });
+            const body = JSON.parse(String(init?.body));
+            models.push(body.model);
+            if (models.length < 4) return new Response('Provider unavailable', { status });
+            expect(body.reasoning).toEqual({ exclude: true });
             return Response.json({
                 choices: [
                     { message: { content: 'The town approved longer library opening hours.' } },
@@ -177,15 +182,20 @@ describe('summarizeContent', () => {
         }) as unknown as typeof fetch;
 
         const result = await summarizeContent(
-            { OPENROUTER_API_KEY: 'test-key' } as Env,
+            {
+                OPENROUTER_API_KEY: 'test-key',
+                FEEDBACK_WEBHOOK_URL: 'https://example.com/alerts',
+                DB: { prepare: claimAlert },
+            } as unknown as Env,
             new Analytics(undefined),
             'The town council voted to keep the public library open longer on weekends.',
             null
         );
 
-        expect(models.at(-1)).toBe('inclusionai/ling-3.0-flash');
+        expect(models.at(-1)).toBe('openrouter/free');
         expect(models).toHaveLength(4);
         expect(result.articleSummary).toBe('The town approved longer library opening hours.');
+        expect(claimAlert).not.toHaveBeenCalled();
     });
 
     test('uses a native Luna model ID when only an OpenAI key is configured', async () => {

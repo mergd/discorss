@@ -12,7 +12,7 @@ export const SUMMARY_MODELS: ReadonlyArray<{ model: string; byokProvider?: strin
     { model: 'anthropic/claude-haiku-5.5', byokProvider: 'anthropic' },
     { model: 'openai/gpt-6-luna', byokProvider: 'openai' },
     { model: 'qwen/qwen3.5-flash-02-23' },
-    { model: 'inclusionai/ling-3.0-flash' },
+    { model: 'openrouter/free' },
 ];
 export const CATEGORY_BACKOFF_COORDINATION_FACTOR = 0.5;
 export const MAX_ITEMS_PER_FEED = 5;
